@@ -2,6 +2,7 @@ package com.example.rentatrajes
 
 import android.R
 import android.R.attr.fontWeight
+import android.annotation.SuppressLint
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import android.os.Bundle
@@ -36,7 +37,6 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -55,6 +55,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.rentatrajes.ui.theme.RentaTrajesTheme
 import androidx.compose.material3.*
+import androidx.compose.ui.Alignment
 import androidx.core.view.WindowCompat.enableEdgeToEdge
 import com.example.rentatrajes.LoginContent
 import java.util.Calendar
@@ -82,7 +83,7 @@ class MainActivity : ComponentActivity() {
 fun AppContent(modifier: Modifier = Modifier) {
     val navController = rememberNavController()
 
-    NavHost(navController = navController, startDestination = "login") {
+    NavHost(navController = navController, startDestination = "menu") {
         composable("login") { LoginContent(navController, modifier) }
         composable("menu") { MenuContent(navController, modifier) }
 
@@ -100,6 +101,8 @@ fun AppContent(modifier: Modifier = Modifier) {
 
         composable ("lstTrajes") {LstTrajesContent(navController,modifier)}
         composable ("frmTrajes") {FrmTrajesContent(navController,modifier)}
+
+        composable ("Comentarios") {Comentarios(navController,modifier)}
     }
 }
 
@@ -317,9 +320,25 @@ fun MenuContent(navController: NavHostController, modifier: Modifier) {
             )
         }
         Spacer(modifier = Modifier.height(16.dp))
-
-
-
+////////////////////////////
+        Button(
+            onClick = {
+                navController.navigate("Comentarios")
+            },
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color.Black,
+                contentColor = Color.White
+            ),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                "Comentarios",
+                style = TextStyle(textDecoration = TextDecoration.Underline),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+        Spacer(modifier = Modifier.height(16.dp))
 
     }
 }
@@ -833,8 +852,8 @@ fun FrmDetalleRentaContent(navController: NavHostController, modifier: Modifier)
         )
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Fecha/Hora Inicio
-        Text(text = "Fecha/Hora Inicio:")
+       // Fecha/Hora Inicio
+        Text(text =  "Fecha/Hora Inicio:")
         OutlinedTextField(
             value = fechaInicio,
             onValueChange = { },
@@ -1030,7 +1049,7 @@ fun LstRentasContent(navController: NavHostController, modifier: Modifier) {
 
         Row {
             Text("ID de la Renta", modifier = Modifier.width(150.dp), fontWeight = FontWeight.Bold)
-            Text("ID del cliente", modifier = Modifier.width(100.dp), fontWeight = FontWeight.Bold)
+            Text("Nombre del cliente", modifier = Modifier.width(100.dp), fontWeight = FontWeight.Bold)
             Text("Eliminar", modifier = Modifier.width(100.dp), fontWeight = FontWeight.Bold)
         }
         Divider()
@@ -1110,7 +1129,7 @@ fun FrmRentasContent(navController: NavHostController, modifier: Modifier) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-
+//-- Aqui inicia el combo box --------------------------
         Text(text = "ID de la renta:")
         ExposedDropdownMenuBox(
             expanded = expandedRenta,
@@ -1146,7 +1165,7 @@ fun FrmRentasContent(navController: NavHostController, modifier: Modifier) {
 
         // --- ComboBox para ID del cliente ---
 
-        Text(text = "ID del cliente:")
+        Text(text = "Nombre del cliente:")
 
         ExposedDropdownMenuBox(
             expanded = expandedCliente,
@@ -1156,7 +1175,7 @@ fun FrmRentasContent(navController: NavHostController, modifier: Modifier) {
                 value = idcliente,
                 onValueChange = {},
                 readOnly = true,
-                label = { Text("Selecciona el ID del cliente") },
+                label = { Text("Selecciona el nombre del cliente") },
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedCliente) },
                 modifier = Modifier
                     .menuAnchor()
@@ -1686,9 +1705,6 @@ fun FrmTrajesContent(navController: NavHostController, modifier: Modifier) {
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
         )
 
-
-
-
         Button(
             onClick = {
                 Toast.makeText(context, "ID: $idTraje", Toast.LENGTH_SHORT).show()
@@ -1702,10 +1718,184 @@ fun FrmTrajesContent(navController: NavHostController, modifier: Modifier) {
         {
             Text("Enviar")
         }
+
+
     }
 }
 
 //////////////////////////////////////////////////////////////////
+////////////// COMENTARIOS ///////////////////////////////////////
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun Comentarios (navController: NavHostController, modifier: Modifier)
+{
+
+    val context = LocalContext.current
+
+    var nombre: String by remember { mutableStateOf("") }
+    var comentario: String by remember { mutableStateOf("") }
+    var traje: String by remember { mutableStateOf("") }
+    var fecha: String by remember { mutableStateOf("") }
+
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(24.dp)
+            .padding(8.dp),
+        horizontalAlignment = Alignment.Start,
+        verticalArrangement = Arrangement.Top
+    ) {
+        Button(
+            onClick = {
+                navController.navigate("menu")
+            },
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color.Transparent,
+                contentColor = Color.Blue
+            ),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                "menu",
+                style = TextStyle(textDecoration = TextDecoration.Underline),
+                textAlign = TextAlign.Start,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        /////////////////////////////////////////////////////////////////////////////////
+        Text(
+            text = "Comentarios",
+            fontSize = 20.sp,
+            fontWeight = FontWeight.ExtraBold,
+            modifier = Modifier.align(Alignment.CenterHorizontally)
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(text = "Nombre de usuario:")
+        TextField(
+            value = nombre,
+            onValueChange = { nombre = it },
+            placeholder = { Text("Nombre de usuario") },
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(text = "Comentario:")
+        TextField(
+            value = comentario,
+            onValueChange = { comentario = it },
+            placeholder = { Text("Comentario") },
+            modifier = Modifier.fillMaxWidth(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+        )
+
+
+
+        Spacer(modifier = Modifier.height(16.dp))
+        ///////////////////////////////////////////////////////////////////////////
+        val trajeList = listOf("corbata", "saco", "vestido", "zapatos")
+
+        // Estados para desplegar los menús -----------------------------------------//
+        var expandedtraje by remember { mutableStateOf(false) }
+
+        Text(text = "Nombre del cliente:")
+
+        ExposedDropdownMenuBox(
+            expanded = expandedtraje,
+            onExpandedChange = { expandedtraje = !expandedtraje }
+        ) {
+            TextField(
+                value = traje,
+                onValueChange = {},
+                readOnly = true,
+                label = { Text("Selecciona el nombre del cliente") },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedtraje) },
+                modifier = Modifier
+                    .menuAnchor()
+                    .fillMaxWidth()
+            )
+            ExposedDropdownMenu(
+                expanded = expandedtraje,
+                onDismissRequest = { expandedtraje = false }
+            ) {
+                trajeList.forEach { id ->
+                    DropdownMenuItem(
+                        text = { Text(id) },
+                        onClick = {
+                            traje = id
+                            expandedtraje = false
+                        }
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+////////////////////////////////////////////////////////////////
+        // Fecha/Hora Inicio
+        Text(text =  "Fecha/Hora:")
+        OutlinedTextField(
+            value = fecha,
+            onValueChange = { },
+            placeholder = { Text("Seleccione fecha y hora") },
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable {
+                    val calendar = Calendar.getInstance()
+                    val datePickerDialog = DatePickerDialog(
+                        context,
+                        { _, year, month, dayOfMonth ->
+                            calendar.set(year, month, dayOfMonth)
+                            val timePickerDialog = TimePickerDialog(
+                                context,
+                                { _, hourOfDay, minute ->
+                                    calendar.set(Calendar.HOUR_OF_DAY, hourOfDay)
+                                    calendar.set(Calendar.MINUTE, minute)
+                                    fecha = String.format(
+                                        "%04d-%02d-%02d %02d:%02d",
+                                        calendar.get(Calendar.YEAR),
+                                        calendar.get(Calendar.MONTH) + 1,
+                                        calendar.get(Calendar.DAY_OF_MONTH),
+                                        calendar.get(Calendar.HOUR_OF_DAY),
+                                        calendar.get(Calendar.MINUTE)
+                                    )
+                                },
+                                calendar.get(Calendar.HOUR_OF_DAY),
+                                calendar.get(Calendar.MINUTE),
+                                true
+                            )
+                            timePickerDialog.show()
+                        },
+                        calendar.get(Calendar.YEAR),
+                        calendar.get(Calendar.MONTH),
+                        calendar.get(Calendar.DAY_OF_MONTH)
+                    )
+                    datePickerDialog.show()
+                },
+            enabled = false
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+///////////////////////////////////////////////////////////////////////////////
+        Button(
+            onClick = {
+                Toast.makeText(context, "Nombre: $nombre", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "Comentario: $comentario", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "traje: $traje", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "Fecha: $fecha", Toast.LENGTH_SHORT).show()
+            },
+            modifier = Modifier.align(Alignment.End)
+        )
+
+        {
+            Text("Enviar")
+        }
+
+    }
+}
+///////////////////////////////////////////////////////////////////
 
 @Preview(showBackground = true)
 @Composable
