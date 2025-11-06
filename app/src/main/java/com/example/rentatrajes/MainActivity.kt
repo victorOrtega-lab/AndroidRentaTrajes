@@ -1,13 +1,15 @@
 package com.example.rentatrajes
 
-import android.os.Build
+import android.R
+import android.R.attr.fontWeight
+import android.app.DatePickerDialog
+import android.app.TimePickerDialog
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -26,24 +28,15 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Divider
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -56,29 +49,31 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.navigation.NavController
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.rentatrajes.ui.theme.RentaTrajesTheme
-import com.google.gson.annotations.SerializedName
-import kotlinx.coroutines.Dispatchers
+import androidx.compose.material3.*
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
+import androidx.core.view.WindowCompat.enableEdgeToEdge
+import com.example.rentatrajes.LoginContent
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import retrofit2.Response
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import retrofit2.converter.scalars.ScalarsConverterFactory
 import retrofit2.http.Field
 import retrofit2.http.FormUrlEncoded
 import retrofit2.http.GET
 import retrofit2.http.POST
-import retrofit2.http.Query
 import java.util.Calendar
-import retrofit2.http.*
+
+
+
 
 class MainActivity : ComponentActivity() {
-    @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -94,12 +89,11 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun AppContent(modifier: Modifier = Modifier) {
     val navController = rememberNavController()
 
-    NavHost(navController = navController, startDestination = "menu") {
+    NavHost(navController = navController, startDestination = "login") {
         composable("login") { LoginContent(navController, modifier) }
         composable("menu") { MenuContent(navController, modifier) }
 
@@ -118,88 +112,21 @@ fun AppContent(modifier: Modifier = Modifier) {
         composable ("lstTrajes") {LstTrajesContent(navController,modifier)}
         composable ("frmTrajes") {FrmTrajesContent(navController,modifier)}
 
-        composable ("Comentarios") {Comentarios(navController,modifier)}
+        composable("frmComentarios") { Comentarios(navController, modifier) }
+
     }
 }
 
-
 ///////////////////////////////////////////////////////////////////////////////////////////
-// ────── MODELOS ──────
-data class ModeloRenta(
-    val id_renta: Int,
-    val nombre: String
-)
-data class ModeloCliente(
-    val id_cliente: Int,
-    val nombre: String
-)
-data class Respuesta(
-    val status: String,
-    val mensaje: String
-)
-data class RespuestaSimple(
-    val status: String
-)
-
-// ────── API ──────
-interface ApiService {
-
-    @FormUrlEncoded
-    @POST("servicio.php")
-    suspend fun iniciarSesion(
-        @Field("accion") accion: String = "iniciarSesion",
-        @Field("usuario") usuario: String,
-        @Field("contrasena") contrasena: String,
-    ): Response<String>
-
-    @FormUrlEncoded
-    @POST("servicio.php")
-    suspend fun insertarRenta(
-        @Field("accion") accion: String = "insertarRenta",
-        @Field("id_cliente") idCliente: Int
-    ): Response<Respuesta>
-
-    @GET("servicio.php?rentas")
-    suspend fun mostrarRentas(): Response<List<ModeloRenta>>
-
-    @FormUrlEncoded
-    @POST("servicio.php?eliminar")
-    suspend fun eliminar(
-        @Field("id_renta") id: Int
-    ): Response<RespuestaSimple>
-
-    @FormUrlEncoded
-    @POST("servicio.php")
-    suspend fun editarRenta(
-        @Field("accion") accion: String = "editarRenta",
-        @Field("id_renta") idRenta: Int,
-        @Field("id_cliente") idCliente: Int
-    ): Response<Respuesta>
-
-    @GET("servicio.php?clientes")
-    suspend fun mostrarClientes(): Response<List<ModeloCliente>>
-}
-
-val retrofit = Retrofit.Builder()
-    .baseUrl("https://disco-completing-temple-protocol.trycloudflare.com/api/")
-    .addConverterFactory(GsonConverterFactory.create())
-    .build()
-
-val api = retrofit.create(ApiService::class.java)
-
-
-////////////////////////////////////////////////////////////////////////////////////////////
-
 @Composable
 fun LoginContent(navController: NavHostController, modifier: Modifier) {
-
-    val scope = rememberCoroutineScope()
 
     val context = LocalContext.current
 
     var usuario: String by remember { mutableStateOf("") }
     var contrasena: String by remember { mutableStateOf("") }
 
+    val scope = rememberCoroutineScope()
 
     Column(
         modifier = modifier
@@ -237,21 +164,20 @@ fun LoginContent(navController: NavHostController, modifier: Modifier) {
         )
         Spacer(modifier = Modifier.height(24.dp))
 
-        Button(
+        Button (
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color.Black,
+                contentColor = Color.White
+            ),
             onClick = {
-
                 scope.launch {
                     try {
-                        val respuesta = api.iniciarSesion(
-                            usuario = usuario,
-                            contrasena = contrasena
-                        )
-
+                        val respuesta : Response<String> = api.IniciarSesion(usuario, contrasena )
                         if (respuesta.body() == "correcto") {
-                            Toast.makeText(context, "Inicio de sesión exitoso", Toast.LENGTH_SHORT).show()
-                            navController.navigate("menu")
-                        } else {
-                            Toast.makeText(context, "Inicio de sesión fallido", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Inicio de sesión exitoso", Toast.LENGTH_SHORT).show()
+                        navController.navigate("menu")
+                    } else {
+                        Toast.makeText(context, "Inicio de sesión fallido", Toast.LENGTH_SHORT).show()
                         }
 
                     }
@@ -262,13 +188,54 @@ fun LoginContent(navController: NavHostController, modifier: Modifier) {
 
             },
             modifier = Modifier.align(Alignment.End)
+
+
         ) {
             Text("Iniciar sesión")
+
+
         }
 
     }
 }
 
+
+
+data class ModeloProducto(
+    val dato1: String,
+    val dato2: Double,
+    val dato3: Int,
+    val usuario: String,
+    val contrasena: String
+
+)
+interface ApiService {
+    @POST("servicio.php?IniciarSesion")
+    @FormUrlEncoded
+    suspend fun IniciarSesion(
+        @Field("usuario") usuario: String,
+        @Field("contrasena") contrasena: String,
+    ): Response<String>
+
+    @GET("servicio.php?productos")
+    suspend fun registros(): List<ModeloProducto>
+
+    @POST("servicio.php?agregarProducto")
+    @FormUrlEncoded
+    suspend fun agregarRegistro(
+        @Field("dato1") dato1: String,
+        @Field("dato2") dato2: Double,
+        @Field("dato3") dato3: Int
+    ): Response<Unit>
+}
+
+val retrofit = Retrofit.Builder()
+    .baseUrl("https://conflict-gotta-dependence-stays.trycloudflare.com/api/")
+    .addConverterFactory(ScalarsConverterFactory.create())
+    .addConverterFactory(GsonConverterFactory.create())
+    .build()
+
+val api = retrofit.create(ApiService::class.java)
 @Composable
 fun MenuContent(navController: NavHostController, modifier: Modifier) {
 
@@ -285,16 +252,17 @@ fun MenuContent(navController: NavHostController, modifier: Modifier) {
                 navController.navigate("login")
             },
             colors = ButtonDefaults.buttonColors(
-                containerColor = Color.Transparent // Remove contentColor from here
+                containerColor = Color.Transparent,
+                contentColor = Color.Blue
             ),
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(
                 "Inicio",
-                color = Color.Blue, // <--- SET THE TEXT COLOR HERE
                 style = TextStyle(textDecoration = TextDecoration.None),
                 textAlign = TextAlign.Start,
                 modifier = Modifier.fillMaxWidth(),
+
             )
         }
         Spacer(modifier = Modifier.height(100.dp))
@@ -409,25 +377,25 @@ fun MenuContent(navController: NavHostController, modifier: Modifier) {
             )
         }
         Spacer(modifier = Modifier.height(16.dp))
-////////////////////////////
+
         Button(
             onClick = {
-                navController.navigate("Comentarios")
+                navController.navigate("frmComentarios")
             },
             colors = ButtonDefaults.buttonColors(
                 containerColor = Color.Black,
                 contentColor = Color.White
             ),
-            modifier = Modifier.fillMaxWidth()
+            modifier = modifier.fillMaxWidth( )
         ) {
             Text(
                 "Comentarios",
                 style = TextStyle(textDecoration = TextDecoration.Underline),
                 textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth()
             )
         }
         Spacer(modifier = Modifier.height(16.dp))
+
 
     }
 }
@@ -941,8 +909,8 @@ fun FrmDetalleRentaContent(navController: NavHostController, modifier: Modifier)
         )
         Spacer(modifier = Modifier.height(16.dp))
 
-       // Fecha/Hora Inicio
-        Text(text =  "Fecha/Hora Inicio:")
+        // Fecha/Hora Inicio
+        Text(text = "Fecha/Hora Inicio:")
         OutlinedTextField(
             value = fechaInicio,
             onValueChange = { },
@@ -951,11 +919,11 @@ fun FrmDetalleRentaContent(navController: NavHostController, modifier: Modifier)
                 .fillMaxWidth()
                 .clickable {
                     val calendar = Calendar.getInstance()
-                    val datePickerDialog = android.app.DatePickerDialog(
+                    val datePickerDialog = DatePickerDialog(
                         context,
                         { _, year, month, dayOfMonth ->
                             calendar.set(year, month, dayOfMonth)
-                            val timePickerDialog = android.app.TimePickerDialog(
+                            val timePickerDialog = TimePickerDialog(
                                 context,
                                 { _, hourOfDay, minute ->
                                     calendar.set(Calendar.HOUR_OF_DAY, hourOfDay)
@@ -995,11 +963,11 @@ fun FrmDetalleRentaContent(navController: NavHostController, modifier: Modifier)
                 .fillMaxWidth()
                 .clickable {
                     val calendar = Calendar.getInstance()
-                    val datePickerDialog = android.app.DatePickerDialog(
+                    val datePickerDialog = DatePickerDialog(
                         context,
                         { _, year, month, dayOfMonth ->
                             calendar.set(year, month, dayOfMonth)
-                            val timePickerDialog = android.app.TimePickerDialog(
+                            val timePickerDialog = TimePickerDialog(
                                 context,
                                 { _, hourOfDay, minute ->
                                     calendar.set(Calendar.HOUR_OF_DAY, hourOfDay)
@@ -1051,40 +1019,29 @@ fun FrmDetalleRentaContent(navController: NavHostController, modifier: Modifier)
 ////////////////   Hector RENTAS  //////////////////////////////////////////////////////
 @Composable
 fun LstRentasContent(navController: NavHostController, modifier: Modifier) {
-
-    val rentas = remember { mutableStateListOf<ModeloRenta>() }
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-
-    // Cargar rentas desde la API
-    LaunchedEffect(Unit) {
-        try {
-            val respuesta = api.mostrarRentas()
-            if (respuesta.isSuccessful) {
-                val lista = respuesta.body() ?: emptyList()
-                rentas.clear()
-                rentas.addAll(lista)
-            } else {
-                Log.e("API", "Error del servidor: ${respuesta.code()}")
-            }
-        } catch (e: Exception) {
-            Log.e("API", "Error al cargar rentas: ${e.message}")
-        }
+    data class Rentas(val idrenta: Int, val idcliente: String)
+    val Rentas = remember {
+        mutableStateListOf(
+            Rentas(1, "Juan"),
+            Rentas(2, "El Sorprendente Raul"),
+            Rentas(3, "Zoe")
+        )
     }
 
     val scrollState = rememberScrollState()
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(16.dp)
-            .horizontalScroll(scrollState),
+            .padding(24.dp)
+            .horizontalScroll(scrollState)
+            .padding(8.dp),
         horizontalAlignment = Alignment.Start,
         verticalArrangement = Arrangement.Top
     ) {
-
-        // Botón menú
         Button(
-            onClick = { navController.navigate("menu") },
+            onClick = {
+                navController.navigate("menu")
+            },
             colors = ButtonDefaults.buttonColors(
                 containerColor = Color.Transparent,
                 contentColor = Color.Blue
@@ -1094,15 +1051,17 @@ fun LstRentasContent(navController: NavHostController, modifier: Modifier) {
             Text(
                 "Menu",
                 style = TextStyle(textDecoration = TextDecoration.Underline),
+                textAlign = TextAlign.Start,
                 modifier = Modifier.fillMaxWidth()
             )
         }
-
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Botón para ir al formulario
+
         Button(
-            onClick = { navController.navigate("frmRentas") },
+            onClick = {
+                navController.navigate("frmRentas")
+            },
             colors = ButtonDefaults.buttonColors(
                 containerColor = Color.Transparent,
                 contentColor = Color.Blue
@@ -1112,83 +1071,61 @@ fun LstRentasContent(navController: NavHostController, modifier: Modifier) {
             Text(
                 "Formulario",
                 style = TextStyle(textDecoration = TextDecoration.Underline),
+                textAlign = TextAlign.Start,
                 modifier = Modifier.fillMaxWidth()
             )
         }
+        Spacer(modifier = Modifier.height(16.dp))
 
+        Button(
+            onClick = {
+                Rentas.add(Rentas(4, "Sandra"))
+            },
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color.Black,
+                contentColor = Color.White
+            ),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                "Agregar IDs prueba",
+                style = TextStyle(textDecoration = TextDecoration.Underline),
+                textAlign = TextAlign.Start,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(
             text = "Rentas",
             fontSize = 20.sp,
-            fontWeight = FontWeight.ExtraBold
+            fontWeight = FontWeight.ExtraBold,
+            modifier = Modifier.align(Alignment.Start)
         )
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Encabezado de tabla
         Row {
-            Text("ID Renta", modifier = Modifier.width(100.dp), fontWeight = FontWeight.Bold)
-            Text("Cliente", modifier = Modifier.width(150.dp), fontWeight = FontWeight.Bold)
-            Text("Editar", modifier = Modifier.width(100.dp), fontWeight = FontWeight.Bold)
+            Text("ID de la Renta", modifier = Modifier.width(150.dp), fontWeight = FontWeight.Bold)
+            Text("Nombre del cliente", modifier = Modifier.width(100.dp), fontWeight = FontWeight.Bold)
             Text("Eliminar", modifier = Modifier.width(100.dp), fontWeight = FontWeight.Bold)
         }
-
         Divider()
-
-        // Filas de rentas
-        rentas.forEachIndexed { index, renta ->
+        Rentas.forEachIndexed { index, producto ->
             val bgColor = if (index % 2 == 0) Color(0xFFF5F5F5) else Color.White
 
-            Row(
+            Row (
                 modifier = Modifier
                     .background(bgColor)
-                    .padding(vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("${renta.id_renta}", modifier = Modifier.width(100.dp))
-                Text(renta.nombre, modifier = Modifier.width(150.dp))
-
-                // Botón Editar: envía el cliente al formulario
-                Button(
-                    onClick = {
-                        navController.currentBackStackEntry?.savedStateHandle?.set("idRenta", renta.id_renta)
-                        navController.currentBackStackEntry?.savedStateHandle?.set("nombreCliente", renta.nombre)
-                        navController.navigate("frmRentas")
-                    },
-                    modifier = Modifier.width(100.dp)
-                ) {
-                    Text("Editar")
-                }
-
-
-                // Botón Eliminar
+                Text("${producto.idrenta}", modifier = Modifier
+                    .width(150.dp)
+                )
+                Text("${producto.idcliente}", modifier = Modifier
+                    .width(100.dp)
+                )
                 Button(onClick = {
-                    scope.launch {
-                        try {
-                            val respuesta = api.eliminar(renta.id_renta)
-                            if (respuesta.isSuccessful) {
-                                Toast.makeText(
-                                    context,
-                                    "Renta eliminada con éxito",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                                rentas.remove(renta)
-                            } else {
-                                Toast.makeText(
-                                    context,
-                                    "Error al eliminar",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            }
-                        } catch (e: Exception) {
-                            Toast.makeText(
-                                context,
-                                "Error de conexión: ${e.message}",
-                                Toast.LENGTH_SHORT
-                            ).show()
-                        }
-                    }
-                }, modifier = Modifier.width(100.dp)) {
+                    Rentas.removeAt(index)
+                }) {
                     Text("Eliminar")
                 }
             }
@@ -1198,90 +1135,118 @@ fun LstRentasContent(navController: NavHostController, modifier: Modifier) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FrmRentasContent(navController: NavController, modifier: Modifier) {
-
-    val idRenta = navController.previousBackStackEntry
-        ?.savedStateHandle
-        ?.get<Int>("idRenta")
-
-    val nombreClienteEdit = navController.previousBackStackEntry
-        ?.savedStateHandle
-        ?.get<String>("nombreCliente")
+fun FrmRentasContent(navController: NavHostController, modifier: Modifier) {
 
     val context = LocalContext.current
 
-    val clientesList = remember { mutableStateListOf<ModeloCliente>() }
-    var selectedCliente by remember { mutableStateOf<ModeloCliente?>(null) }
+    var idrenta by remember { mutableStateOf("") }
+    var idcliente by remember { mutableStateOf("") }
+
+    val rentasList = listOf("R001", "R002", "R003", "R004")
+    val clientesList = listOf("El Sorprendente Raul", "Zoe", "Lara Horse")
+
+    // Estados para desplegar los menús -----------------------------------------//
+    var expandedRenta by remember { mutableStateOf(false) }
     var expandedCliente by remember { mutableStateOf(false) }
-
-    // Cargar clientes
-    LaunchedEffect(Unit) {
-        val respuestaClientes = api.mostrarClientes()
-        if (respuestaClientes.isSuccessful) {
-            clientesList.clear()
-            clientesList.addAll(respuestaClientes.body() ?: emptyList())
-
-            // Si estamos editando, seleccionar el cliente actual
-            if (nombreClienteEdit != null) {
-                selectedCliente = clientesList.find { it.nombre == nombreClienteEdit }
-            }
-        }
-    }
 
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(24.dp),
-        horizontalAlignment = Alignment.Start
+            .padding(24.dp)
+            .padding(8.dp),
+        horizontalAlignment = Alignment.Start,
+        verticalArrangement = Arrangement.Top
     ) {
-
         Button(
-            onClick = { navController.navigate("lstRentas") },
+            onClick = {
+                navController.navigate("lstRentas")
+            },
             colors = ButtonDefaults.buttonColors(
                 containerColor = Color.Transparent,
                 contentColor = Color.Blue
             ),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text("Tabla", style = TextStyle(textDecoration = TextDecoration.Underline))
+            Text(
+                "Rentas",
+                style = TextStyle(textDecoration = TextDecoration.Underline),
+                textAlign = TextAlign.Start,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
         Text(
-            if (idRenta == null) "Crear Renta" else "Editar Renta",
+            text = "Rentas",
             fontSize = 20.sp,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.ExtraBold,
+            modifier = Modifier.align(Alignment.CenterHorizontally)
         )
 
+        Spacer(modifier = Modifier.height(16.dp))
 
-        Spacer(Modifier.height(16.dp))
 
-        Text("Nombre del cliente:")
+        Text(text = "ID de la renta:")
+        ExposedDropdownMenuBox(
+            expanded = expandedRenta,
+            onExpandedChange = { expandedRenta = !expandedRenta }
+        ) {
+            TextField(
+                value = idrenta,
+                onValueChange = {},
+                readOnly = true,
+                label = { Text("Selecciona el ID de la renta") },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedRenta) },
+                modifier = Modifier
+                    .menuAnchor()
+                    .fillMaxWidth()
+            )
+            ExposedDropdownMenu(
+                expanded = expandedRenta,
+                onDismissRequest = { expandedRenta = false }
+            ) {
+                rentasList.forEach { id ->
+                    DropdownMenuItem(
+                        text = { Text(id) },
+                        onClick = {
+                            idrenta = id
+                            expandedRenta = false
+                        }
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // --- ComboBox para ID del cliente ---
+
+        Text(text = "Nombre del cliente:")
+
         ExposedDropdownMenuBox(
             expanded = expandedCliente,
             onExpandedChange = { expandedCliente = !expandedCliente }
         ) {
             TextField(
-                value = selectedCliente?.nombre ?: "",
+                value = idcliente,
                 onValueChange = {},
                 readOnly = true,
-                label = { Text("Selecciona el cliente") },
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expandedCliente) },
+                label = { Text("Selecciona el nombre del cliente") },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedCliente) },
                 modifier = Modifier
                     .menuAnchor()
                     .fillMaxWidth()
             )
-
             ExposedDropdownMenu(
                 expanded = expandedCliente,
                 onDismissRequest = { expandedCliente = false }
             ) {
-                clientesList.forEach { cliente ->
+                clientesList.forEach { id ->
                     DropdownMenuItem(
-                        text = { Text(cliente.nombre) },
+                        text = { Text(id) },
                         onClick = {
-                            selectedCliente = cliente
+                            idcliente = id
                             expandedCliente = false
                         }
                     )
@@ -1289,37 +1254,22 @@ fun FrmRentasContent(navController: NavController, modifier: Modifier) {
             }
         }
 
-        Spacer(Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
-        val scope = rememberCoroutineScope()
 
-        Button(onClick = {
-            val idCliente = selectedCliente?.id_cliente
-            if (idCliente == null) {
-                Toast.makeText(context, "Selecciona un cliente", Toast.LENGTH_SHORT).show()
-                return@Button
-            }
-
-            scope.launch {
-                val resp = if (idRenta == null) {
-                    api.insertarRenta(idCliente = idCliente)
-                } else {
-                    api.editarRenta(idRenta = idRenta, idCliente = idCliente)
-                }
-
-                if (resp.isSuccessful) {
-                    Toast.makeText(context, resp.body()?.mensaje ?: "OK", Toast.LENGTH_SHORT).show()
-                    navController.navigate("lstRentas")
-                } else {
-                    Toast.makeText(context, "Error en el servidor", Toast.LENGTH_SHORT).show()
-                }
-            }
-        }) {
-            Text(if (idRenta == null) "Insertar" else "Guardar Cambios")
+        // --- Botón Enviar ---
+        Button(
+            onClick = {
+                Toast.makeText(context, "ID de la Renta: $idrenta", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "ID del Cliente: $idcliente", Toast.LENGTH_SHORT).show()
+            },
+            modifier = Modifier.align(Alignment.End)
+        ) {
+            Text("Enviar")
         }
-
     }
 }
+
 
 //////////////////////////////////////////////////////////////////
 
@@ -1724,6 +1674,258 @@ fun LstTrajesContent(navController: NavHostController, modifier: Modifier) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun Comentarios(navController: NavHostController, modifier: Modifier) {
+
+    val context = LocalContext.current
+
+    var nombre: String by remember { mutableStateOf("") }
+    var descripcion: String by remember { mutableStateOf("") }
+    var fecha: String by remember { mutableStateOf("") }
+    var traje: String by remember { mutableStateOf("") }
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(24.dp)
+            .padding(8.dp),
+        horizontalAlignment = Alignment.Start,
+        verticalArrangement = Arrangement.Top
+    ) {
+
+        Button(
+            onClick = { navController.navigate("Menu") },
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color.Transparent,
+                contentColor = Color.Blue
+            ),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                "Menú",
+                style = TextStyle(textDecoration = TextDecoration.Underline),
+                textAlign = TextAlign.Start,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+            text = "Comentarios",
+            fontSize = 40.sp,
+            fontWeight = FontWeight.ExtraLight,
+            modifier = Modifier.align(Alignment.CenterHorizontally)
+        )
+        Spacer(modifier = Modifier.height(30.dp))
+
+        //------------------------------------------------------------
+
+        Text(text = "Nombre del Usuario:")
+        TextField(
+            value = nombre,
+            onValueChange = { nombre = it },
+            placeholder = { Text("Ingresa el nombre del usuario") },
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(modifier = Modifier.height(25.dp))
+
+        //------------------------------------------------------------
+
+        Text(text = "Comentario:")
+        TextField(
+            value = descripcion,
+            onValueChange = { descripcion = it },
+            placeholder = { Text("Ingresa su comentario") },
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(modifier = Modifier.height(25.dp))
+
+        //------------------------------------------------------------
+
+        // Estados para desplegar los menús -----------------------------------------//
+        var expandedtraje by remember { mutableStateOf(false) }
+
+        // Asignar valores al combo box ---------------------------------------------//
+        val trajeList = listOf("Saco guindo", "pantalon negro", "camisa morada")
+
+        Text(text = "Traje:")
+
+        ExposedDropdownMenuBox(
+            expanded = expandedtraje,
+            onExpandedChange = { expandedtraje = !expandedtraje }
+        ) {
+            TextField(
+                value = traje,
+                onValueChange = {},
+                readOnly = true,
+                label = { Text("Selecciona el traje") },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedtraje) },
+                modifier = Modifier
+                    .menuAnchor()
+                    .fillMaxWidth()
+            )
+            ExposedDropdownMenu(
+                expanded = expandedtraje,
+                onDismissRequest = { expandedtraje = false }
+            ) {
+                trajeList.forEach { id ->
+                    DropdownMenuItem(
+                        text = { Text(id) },
+                        onClick = {
+                            traje = id
+                            expandedtraje = false
+                        }
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        //------------------------------------------------------------
+
+        // Fecha/Hora
+        Text(text = "Fecha/Hora:")
+        OutlinedTextField(
+            value = fecha,
+            onValueChange = { },
+            placeholder = { Text("Seleccione fecha y hora") },
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable {
+                    val calendar = Calendar.getInstance()
+                    val datePickerDialog = DatePickerDialog(
+                        context,
+                        { _, year, month, dayOfMonth ->
+                            calendar.set(year, month, dayOfMonth)
+                            val timePickerDialog = TimePickerDialog(
+                                context,
+                                { _, hourOfDay, minute ->
+                                    calendar.set(Calendar.HOUR_OF_DAY, hourOfDay)
+                                    calendar.set(Calendar.MINUTE, minute)
+                                    fecha = String.format(
+                                        "%04d-%02d-%02d %02d:%02d",
+                                        calendar.get(Calendar.YEAR),
+                                        calendar.get(Calendar.MONTH) + 1,
+                                        calendar.get(Calendar.DAY_OF_MONTH),
+                                        calendar.get(Calendar.HOUR_OF_DAY),
+                                        calendar.get(Calendar.MINUTE)
+                                    )
+                                },
+                                calendar.get(Calendar.HOUR_OF_DAY),
+                                calendar.get(Calendar.MINUTE),
+                                true
+                            )
+                            timePickerDialog.show()
+                        },
+                        calendar.get(Calendar.YEAR),
+                        calendar.get(Calendar.MONTH),
+                        calendar.get(Calendar.DAY_OF_MONTH)
+                    )
+                    datePickerDialog.show()
+                },
+            enabled = false
+        )
+        Spacer(modifier = Modifier.height(50.dp))
+
+        //------------------------------------------------------------
+
+
+        Button(
+            onClick = {
+                Toast.makeText(context, "ID de la Renta: $nombre", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "ID del Cliente: $descripcion", Toast.LENGTH_SHORT).show()
+            },
+            modifier = Modifier.align(Alignment.CenterHorizontally)
+        ) {
+            Text("Enviar")
+        }
+
+
+        //------------------------------------------------------------
+        val scrollState = rememberScrollState()
+
+        Column(
+            modifier = modifier
+                .horizontalScroll(scrollState)
+                .padding(8.dp),
+            horizontalAlignment = Alignment.Start,
+            verticalArrangement = Arrangement.Top
+        ) {
+
+            data class tabla(
+                val nombretxt: String,
+                val comentariotxt: String,
+                val trajetxt: String,
+                val fechatxt: String
+            )
+
+            val tabla = remember {
+                mutableStateListOf(
+                    tabla("Juan", "Muy buen producto", "Pantalon negro", "22-10-25"),
+                    tabla("Raul", "100% recomendado", "camisa morada", "26-10-25"),
+                    tabla("Zoe", "Lo volveria a rentar", "zapatos cafes", "23-10-25")
+                )
+            }
+
+            Row {
+                Text(
+                    "Nombre del usuario",
+                    modifier = Modifier.width(150.dp),
+                    fontWeight = FontWeight.Bold
+                )
+                Text("Comenatrio", modifier = Modifier.width(100.dp), fontWeight = FontWeight.Bold)
+                Text("Traje", modifier = Modifier.width(100.dp), fontWeight = FontWeight.Bold)
+                Text("Fecha", modifier = Modifier.width(100.dp), fontWeight = FontWeight.Bold)
+            }
+
+            Divider()
+            tabla.forEachIndexed { index, producto ->
+                val bgColor = if (index % 2 == 0) Color(0xFFF5F5F5) else Color.White
+
+                Row(
+                    modifier = Modifier
+                        .background(bgColor)
+                ) {
+                    Text(
+                        "${producto.nombretxt}", modifier = Modifier
+                            .width(150.dp)
+                    )
+                    Text(
+                        "${producto.comentariotxt}", modifier = Modifier
+                            .width(100.dp)
+                    )
+                    Text(
+                        "${producto.trajetxt}", modifier = Modifier
+                            .width(100.dp)
+                    )
+                    Text(
+                        "${producto.fechatxt}", modifier = Modifier
+                            .width(100.dp)
+                    )
+                    Button(onClick = {
+                        tabla.removeAt(index)
+
+                    }) {
+                        Text("Eliminar")
+                    }
+
+                    Button(onClick = {
+                        tabla.get(index)
+                        Toast.makeText(context, "ID de la Renta: $nombre", Toast.LENGTH_SHORT).show()
+
+                    }) {
+                        Text("Mostrar")
+                    }
+
+                }
+            }
+        }
+        //------------------------------------------------------------
+    }
+}
 
 @Composable
 fun FrmTrajesContent(navController: NavHostController, modifier: Modifier) {
@@ -1812,6 +2014,9 @@ fun FrmTrajesContent(navController: NavHostController, modifier: Modifier) {
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
         )
 
+
+
+
         Button(
             onClick = {
                 Toast.makeText(context, "ID: $idTraje", Toast.LENGTH_SHORT).show()
@@ -1825,187 +2030,12 @@ fun FrmTrajesContent(navController: NavHostController, modifier: Modifier) {
         {
             Text("Enviar")
         }
-
-
     }
 }
 
 //////////////////////////////////////////////////////////////////
-////////////// COMENTARIOS ///////////////////////////////////////
-
-@RequiresApi(Build.VERSION_CODES.O)
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun Comentarios (navController: NavHostController, modifier: Modifier)
-{
-
-    val context = LocalContext.current
-
-    var nombre: String by remember { mutableStateOf("") }
-    var comentario: String by remember { mutableStateOf("") }
-    var traje: String by remember { mutableStateOf("") }
-    var fecha: String by remember { mutableStateOf("") }
 
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(24.dp)
-            .padding(8.dp),
-        horizontalAlignment = Alignment.Start,
-        verticalArrangement = Arrangement.Top
-    ) {
-        Button(
-            onClick = {
-                navController.navigate("menu")
-            },
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color.Transparent,
-                contentColor = Color.Blue
-            ),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                "menu",
-                style = TextStyle(textDecoration = TextDecoration.Underline),
-                textAlign = TextAlign.Start,
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-        Spacer(modifier = Modifier.height(16.dp))
-        /////////////////////////////////////////////////////////////////////////////////
-        Text(
-            text = "Comentarios",
-            fontSize = 20.sp,
-            fontWeight = FontWeight.ExtraBold,
-            modifier = Modifier.align(Alignment.CenterHorizontally)
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Text(text = "Nombre de usuario:")
-        TextField(
-            value = nombre,
-            onValueChange = { nombre = it },
-            placeholder = { Text("Nombre de usuario") },
-            modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Text(text = "Comentario:")
-        TextField(
-            value = comentario,
-            onValueChange = { comentario = it },
-            placeholder = { Text("Comentario") },
-            modifier = Modifier.fillMaxWidth(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-        )
-
-
-
-        Spacer(modifier = Modifier.height(16.dp))
-        ///////////////////////////////////////////////////////////////////////////
-        val trajeList = listOf("corbata", "saco", "vestido", "zapatos")
-
-        // Estados para desplegar los menús -----------------------------------------//
-        var expandedtraje by remember { mutableStateOf(false) }
-
-        Text(text = "Nombre del cliente:")
-
-        ExposedDropdownMenuBox(
-            expanded = expandedtraje,
-            onExpandedChange = { expandedtraje = !expandedtraje }
-        ) {
-            TextField(
-                value = traje,
-                onValueChange = {},
-                readOnly = true,
-                label = { Text("Selecciona el nombre del cliente") },
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedtraje) },
-                modifier = Modifier
-                    .menuAnchor()
-                    .fillMaxWidth()
-            )
-            ExposedDropdownMenu(
-                expanded = expandedtraje,
-                onDismissRequest = { expandedtraje = false }
-            ) {
-                trajeList.forEach { id ->
-                    DropdownMenuItem(
-                        text = { Text(id) },
-                        onClick = {
-                            traje = id
-                            expandedtraje = false
-                        }
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-////////////////////////////////////////////////////////////////
-        // Fecha/Hora Inicio
-        Text(text =  "Fecha/Hora:")
-        OutlinedTextField(
-            value = fecha,
-            onValueChange = { },
-            placeholder = { Text("Seleccione fecha y hora") },
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable {
-                    val calendar = Calendar.getInstance()
-                    val datePickerDialog = android.app.DatePickerDialog(
-                        context,
-                        { _, year, month, dayOfMonth ->
-                            calendar.set(year, month, dayOfMonth)
-                            val timePickerDialog = android.app.TimePickerDialog(
-                                context,
-                                { _, hourOfDay, minute ->
-                                    calendar.set(Calendar.HOUR_OF_DAY, hourOfDay)
-                                    calendar.set(Calendar.MINUTE, minute)
-                                    fecha = String.format(
-                                        "%04d-%02d-%02d %02d:%02d",
-                                        calendar.get(Calendar.YEAR),
-                                        calendar.get(Calendar.MONTH) + 1,
-                                        calendar.get(Calendar.DAY_OF_MONTH),
-                                        calendar.get(Calendar.HOUR_OF_DAY),
-                                        calendar.get(Calendar.MINUTE)
-                                    )
-                                },
-                                calendar.get(Calendar.HOUR_OF_DAY),
-                                calendar.get(Calendar.MINUTE),
-                                true
-                            )
-                            timePickerDialog.show()
-                        },
-                        calendar.get(Calendar.YEAR),
-                        calendar.get(Calendar.MONTH),
-                        calendar.get(Calendar.DAY_OF_MONTH)
-                    )
-                    datePickerDialog.show()
-                },
-            enabled = false
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-///////////////////////////////////////////////////////////////////////////////
-        Button(
-            onClick = {
-                Toast.makeText(context, "Nombre: $nombre", Toast.LENGTH_SHORT).show()
-                Toast.makeText(context, "Comentario: $comentario", Toast.LENGTH_SHORT).show()
-                Toast.makeText(context, "traje: $traje", Toast.LENGTH_SHORT).show()
-                Toast.makeText(context, "Fecha: $fecha", Toast.LENGTH_SHORT).show()
-            },
-            modifier = Modifier.align(Alignment.End)
-        )
-
-        {
-            Text("Enviar")
-        }
-
-    }
-}
-///////////////////////////////////////////////////////////////////
-
-@RequiresApi(Build.VERSION_CODES.O)
 @Preview(showBackground = true)
 @Composable
 fun AppContentPreview() {
@@ -2016,7 +2046,5 @@ fun AppContentPreview() {
 
 @Composable
 fun RentaTrajesTheme(content: @Composable () -> Unit) {
-    MaterialTheme(
-        content = content
-    )
+    TODO("Not yet implemented")
 }
