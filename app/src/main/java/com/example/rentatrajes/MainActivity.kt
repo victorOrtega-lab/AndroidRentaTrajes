@@ -234,8 +234,8 @@ val retrofit = Retrofit.Builder()
     .addConverterFactory(ScalarsConverterFactory.create())
     .addConverterFactory(GsonConverterFactory.create())
     .build()
-
 val api = retrofit.create(ApiService::class.java)
+
 @Composable
 fun MenuContent(navController: NavHostController, modifier: Modifier) {
 
