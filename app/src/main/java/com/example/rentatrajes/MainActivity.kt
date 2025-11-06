@@ -1,15 +1,13 @@
 package com.example.rentatrajes
 
-import android.R
-import android.R.attr.fontWeight
-import android.annotation.SuppressLint
-import android.app.DatePickerDialog
-import android.app.TimePickerDialog
+import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -28,6 +26,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Divider
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
@@ -36,7 +40,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -53,17 +59,19 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.example.rentatrajes.ui.theme.RentaTrajesTheme
-import androidx.compose.material3.*
-import androidx.compose.ui.Alignment
-import androidx.core.view.WindowCompat.enableEdgeToEdge
-import com.example.rentatrajes.LoginContent
+import kotlinx.coroutines.launch
+import retrofit2.Response
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
+import retrofit2.converter.scalars.ScalarsConverterFactory
+import retrofit2.http.Field
+import retrofit2.http.FormUrlEncoded
+import retrofit2.http.GET
+import retrofit2.http.POST
 import java.util.Calendar
 
-
-
-
 class MainActivity : ComponentActivity() {
+    @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -79,6 +87,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun AppContent(modifier: Modifier = Modifier) {
     val navController = rememberNavController()
@@ -106,9 +115,12 @@ fun AppContent(modifier: Modifier = Modifier) {
     }
 }
 
+
 ///////////////////////////////////////////////////////////////////////////////////////////
 @Composable
 fun LoginContent(navController: NavHostController, modifier: Modifier) {
+
+    val scope = rememberCoroutineScope()
 
     val context = LocalContext.current
 
@@ -151,33 +163,72 @@ fun LoginContent(navController: NavHostController, modifier: Modifier) {
         )
         Spacer(modifier = Modifier.height(24.dp))
 
-        Button (
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color.Black,
-                contentColor = Color.White
-            ),
+        Button(
             onClick = {
-                Toast.makeText(context, "Usuario: ${usuario}", Toast.LENGTH_SHORT).show()
-                Toast.makeText(context, "Contraseña: ${contrasena}", Toast.LENGTH_SHORT).show()
-                if (usuario == "UTNC" && contrasena == "123") {
-                    navController.navigate("menu")
-                } else {
-                    Toast.makeText(context, "Usuario o contraseña incorrectos", Toast.LENGTH_SHORT).show()
-                    navController.navigate("login")
+
+                scope.launch {
+                    try {
+                        val respuesta : Response<String> = api.iniciarSesion(usuario, contrasena )
+                        if (respuesta.body() == "correcto") {
+                            Toast.makeText(context, "Inicio de sesión exitoso", Toast.LENGTH_SHORT).show()
+                            navController.navigate("menu")
+                        } else {
+                            Toast.makeText(context, "Inicio de sesión fallido", Toast.LENGTH_SHORT).show()
+                        }
+
+                    }
+                    catch (e: Exception) {
+                        Log.e("API", "Error al iniciar sesion: ${e.message}")
+                    }
                 }
 
             },
             modifier = Modifier.align(Alignment.End)
-
-
         ) {
             Text("Iniciar sesión")
-
-
         }
 
     }
 }
+
+data class ModeloProducto(
+    val dato1: String,
+    val dato2: Double,
+    val dato3: Int,
+    val usuario: String,
+    val contrasena: String
+
+)
+interface ApiService {
+    @POST("servicio.php?iniciarSesion")
+    @FormUrlEncoded
+    suspend fun iniciarSesion(
+        @Field("usuario") usuario: String,
+        @Field("contrasena") contrasena: String,
+    ): Response<String>
+
+    @GET("servicio.php?productos")
+    suspend fun registros(): List<ModeloProducto>
+
+    @POST("servicio.php?agregarProducto")
+    @FormUrlEncoded
+
+    suspend fun agregarRegistro(
+        @Field("dato1") dato1: String,
+        @Field("dato2") dato2: Double,
+        @Field("dato3") dato3: Int
+    ): Response<Unit>
+}
+
+val retrofit = Retrofit.Builder()
+    .baseUrl("https://newsletter-info-eat-funny.trycloudflare.com/api/")
+    .addConverterFactory(ScalarsConverterFactory.create())
+    .addConverterFactory(GsonConverterFactory.create())
+    .build()
+val api = retrofit.create(ApiService::class.java)
+
+
+
 
 @Composable
 fun MenuContent(navController: NavHostController, modifier: Modifier) {
@@ -195,17 +246,16 @@ fun MenuContent(navController: NavHostController, modifier: Modifier) {
                 navController.navigate("login")
             },
             colors = ButtonDefaults.buttonColors(
-                containerColor = Color.Transparent,
-                contentColor = Color.Blue
+                containerColor = Color.Transparent // Remove contentColor from here
             ),
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(
                 "Inicio",
+                color = Color.Blue, // <--- SET THE TEXT COLOR HERE
                 style = TextStyle(textDecoration = TextDecoration.None),
                 textAlign = TextAlign.Start,
                 modifier = Modifier.fillMaxWidth(),
-
             )
         }
         Spacer(modifier = Modifier.height(100.dp))
@@ -862,11 +912,11 @@ fun FrmDetalleRentaContent(navController: NavHostController, modifier: Modifier)
                 .fillMaxWidth()
                 .clickable {
                     val calendar = Calendar.getInstance()
-                    val datePickerDialog = DatePickerDialog(
+                    val datePickerDialog = android.app.DatePickerDialog(
                         context,
                         { _, year, month, dayOfMonth ->
                             calendar.set(year, month, dayOfMonth)
-                            val timePickerDialog = TimePickerDialog(
+                            val timePickerDialog = android.app.TimePickerDialog(
                                 context,
                                 { _, hourOfDay, minute ->
                                     calendar.set(Calendar.HOUR_OF_DAY, hourOfDay)
@@ -906,11 +956,11 @@ fun FrmDetalleRentaContent(navController: NavHostController, modifier: Modifier)
                 .fillMaxWidth()
                 .clickable {
                     val calendar = Calendar.getInstance()
-                    val datePickerDialog = DatePickerDialog(
+                    val datePickerDialog = android.app.DatePickerDialog(
                         context,
                         { _, year, month, dayOfMonth ->
                             calendar.set(year, month, dayOfMonth)
-                            val timePickerDialog = TimePickerDialog(
+                            val timePickerDialog = android.app.TimePickerDialog(
                                 context,
                                 { _, hourOfDay, minute ->
                                     calendar.set(Calendar.HOUR_OF_DAY, hourOfDay)
@@ -1726,6 +1776,7 @@ fun FrmTrajesContent(navController: NavHostController, modifier: Modifier) {
 //////////////////////////////////////////////////////////////////
 ////////////// COMENTARIOS ///////////////////////////////////////
 
+@RequiresApi(Build.VERSION_CODES.O)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun Comentarios (navController: NavHostController, modifier: Modifier)
@@ -1845,11 +1896,11 @@ fun Comentarios (navController: NavHostController, modifier: Modifier)
                 .fillMaxWidth()
                 .clickable {
                     val calendar = Calendar.getInstance()
-                    val datePickerDialog = DatePickerDialog(
+                    val datePickerDialog = android.app.DatePickerDialog(
                         context,
                         { _, year, month, dayOfMonth ->
                             calendar.set(year, month, dayOfMonth)
-                            val timePickerDialog = TimePickerDialog(
+                            val timePickerDialog = android.app.TimePickerDialog(
                                 context,
                                 { _, hourOfDay, minute ->
                                     calendar.set(Calendar.HOUR_OF_DAY, hourOfDay)
@@ -1897,6 +1948,7 @@ fun Comentarios (navController: NavHostController, modifier: Modifier)
 }
 ///////////////////////////////////////////////////////////////////
 
+@RequiresApi(Build.VERSION_CODES.O)
 @Preview(showBackground = true)
 @Composable
 fun AppContentPreview() {
@@ -1907,5 +1959,7 @@ fun AppContentPreview() {
 
 @Composable
 fun RentaTrajesTheme(content: @Composable () -> Unit) {
-    TODO("Not yet implemented")
+    MaterialTheme(
+        content = content
+    )
 }
