@@ -248,7 +248,7 @@ interface ApiService {
 }
 
 val retrofit = Retrofit.Builder()
-    .baseUrl("https://murray-demographic-insertion-styles.trycloudflare.com/api/")
+    .baseUrl("https://arms-grown-five-bottom.trycloudflare.com/api/")
     .addConverterFactory(GsonConverterFactory.create())
     .addConverterFactory(ScalarsConverterFactory.create())
     .build()
