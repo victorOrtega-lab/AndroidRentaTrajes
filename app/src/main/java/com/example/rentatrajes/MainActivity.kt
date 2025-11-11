@@ -55,6 +55,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.rentatrajes.ui.theme.RentaTrajesTheme
 import androidx.compose.material3.*
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.core.view.WindowCompat.enableEdgeToEdge
@@ -93,7 +94,7 @@ class MainActivity : ComponentActivity() {
 fun AppContent(modifier: Modifier = Modifier) {
     val navController = rememberNavController()
 
-    NavHost(navController = navController, startDestination = "login") {
+    NavHost(navController = navController, startDestination = "lstClientes") {
         composable("login") { LoginContent(navController, modifier) }
         composable("menu") { MenuContent(navController, modifier) }
 
@@ -172,18 +173,20 @@ fun LoginContent(navController: NavHostController, modifier: Modifier) {
             onClick = {
                 scope.launch {
                     try {
-                        val respuesta : Response<String> = api.IniciarSesion(usuario, contrasena )
-                        if (respuesta.body() == "correcto") {
-                        Toast.makeText(context, "Inicio de sesión exitoso", Toast.LENGTH_SHORT).show()
-                        navController.navigate("menu")
-                    } else {
-                        Toast.makeText(context, "Inicio de sesión fallido", Toast.LENGTH_SHORT).show()
-                        }
+                        val respuesta : Response<Unit> = api.IniciarSesion(usuario = usuario , contrasena= contrasena )
+                        if (respuesta.isSuccessful) {
+                            Toast.makeText(context, "Inicio de sesión exitoso", Toast.LENGTH_SHORT).show()
+                            navController.navigate("menu")
+                        } else {
+                            // Muestra el mensaje de error que devuelve el servidor, es más útil para depurar
+                            val mensajeError = respuesta.errorBody() ?.string()?: "Respuesta vacía del servidor"
+                            Toast.makeText(context, "Fallo: $mensajeError", Toast.LENGTH_SHORT).show()
+                            Log.e("API_LOGIN", "Respuesta del servidor: $mensajeError")
 
-                    }
-                    catch (e: Exception) {
-                        Log.e("API", "Error al iniciar sesion: ${e.message}")
-                    }
+                            }
+                        } catch (e: Exception) {
+                        Toast.makeText(context, "Error de conexión: ${e.message}", Toast.LENGTH_SHORT).show()
+                        }
                 }
 
             },
@@ -201,40 +204,56 @@ fun LoginContent(navController: NavHostController, modifier: Modifier) {
 
 
 
-data class ModeloProducto(
-    val dato1: String,
-    val dato2: Double,
-    val dato3: Int,
-    val usuario: String,
-    val contrasena: String
+data class ModeloCliente(
+    val id: Int,
+    val nombre: String,
+    val telefono: String,
+    val correo: String,
 
 )
 interface ApiService {
-    @POST("servicio.php?IniciarSesion")
+    @POST("servicio.php")
     @FormUrlEncoded
     suspend fun IniciarSesion(
         @Field("usuario") usuario: String,
         @Field("contrasena") contrasena: String,
-    ): Response<String>
-
-    @GET("servicio.php?productos")
-    suspend fun registros(): List<ModeloProducto>
-
-    @POST("servicio.php?agregarProducto")
-    @FormUrlEncoded
-    suspend fun agregarRegistro(
-        @Field("dato1") dato1: String,
-        @Field("dato2") dato2: Double,
-        @Field("dato3") dato3: Int
     ): Response<Unit>
+
+    @GET("servicio.php?clientes")
+    suspend fun getClientes(): List<ModeloCliente>
+
+    @POST("servicio.php?agregarCliente")
+    @FormUrlEncoded
+    suspend fun agregarCliente(
+        @Field("nombre") nombre: String,
+        @Field("telefono") telefono: String,
+        @Field("correo") correo: String
+    ): Response<Unit>
+
+
+    @POST("servicio.php?modificarCliente")
+    @FormUrlEncoded
+    suspend fun modificarCliente(
+        @Field("id") id: String,
+        @Field("nombre") nombre: String,
+        @Field("telefono") telefono: String,
+        @Field("correo") correo: String
+    ): Response<Unit  >
+    @POST("servicio.php?eliminarCliente")
+    @FormUrlEncoded
+    suspend fun eliminarCliente(
+
+        @Field("id") id: Int
+     ): Response<Unit >
 }
 
 val retrofit = Retrofit.Builder()
-    .baseUrl("https://conflict-gotta-dependence-stays.trycloudflare.com/api/")
-    .addConverterFactory(ScalarsConverterFactory.create())
+    .baseUrl("https://murray-demographic-insertion-styles.trycloudflare.com/api/")
     .addConverterFactory(GsonConverterFactory.create())
+    .addConverterFactory(ScalarsConverterFactory.create())
     .build()
 val api = retrofit.create(ApiService::class.java)
+
 
 @Composable
 fun MenuContent(navController: NavHostController, modifier: Modifier) {
@@ -467,7 +486,13 @@ fun LstProveedoresContent(navController: NavHostController, modifier: Modifier) 
 
         Button(
             onClick = {
-                productos.add(Proveedores(4, "Louis Vuitton", "5589423765", direccion="Av. Presidente Masaryk #350, col Polanco"),
+                productos.add(
+                    Proveedores(
+                        4,
+                        "Louis Vuitton",
+                        "5589423765",
+                        direccion = "Av. Presidente Masaryk #350, col Polanco"
+                    ),
                 )
             },
             colors = ButtonDefaults.buttonColors(
@@ -706,7 +731,15 @@ fun LstDetalleRentaContent(navController: NavHostController, modifier: Modifier)
 
         Button(
             onClick = {
-                productos.add(Producto(8, 10, 750.00, "Renta de traje negro a modo de prueba", "2025-10-06 10:00", "2025-10-07 18:00"),
+                productos.add(
+                    Producto(
+                        8,
+                        10,
+                        750.00,
+                        "Renta de traje negro a modo de prueba",
+                        "2025-10-06 10:00",
+                        "2025-10-07 18:00"
+                    ),
                 )
             },
             colors = ButtonDefaults.buttonColors(
@@ -825,7 +858,9 @@ fun FrmDetalleRentaContent(navController: NavHostController, modifier: Modifier)
             modifier = Modifier.fillMaxWidth()
         ) {
             TextField(
-                modifier = Modifier.menuAnchor().fillMaxWidth(),
+                modifier = Modifier
+                    .menuAnchor()
+                    .fillMaxWidth(),
                 readOnly = true,
                 value = idRenta ?: "",
                 onValueChange = { },
@@ -862,7 +897,9 @@ fun FrmDetalleRentaContent(navController: NavHostController, modifier: Modifier)
             modifier = Modifier.fillMaxWidth()
         ) {
             TextField(
-                modifier = Modifier.menuAnchor().fillMaxWidth(),
+                modifier = Modifier
+                    .menuAnchor()
+                    .fillMaxWidth(),
                 readOnly = true,
                 value = idTraje ?: "",
                 onValueChange = { },
@@ -1276,15 +1313,30 @@ fun FrmRentasContent(navController: NavHostController, modifier: Modifier) {
 ////////////////   Big-tour CLIENTES  //////////////////////////////////////////////////////
 @Composable
 fun LstClientesContent(navController: NavHostController, modifier: Modifier) {
-    data class Producto(val idcliente: Int, val nombre: String, val telefono: String, val CorreoElectronico: String )
-    val productos = remember {
-        mutableStateListOf(
-            Producto(1, "juan", "8783347354" , CorreoElectronico = "asd@qwer.com"),
-            Producto(2, "el sorprendente raul", "8774324789", "qwer@zxc.com"),
-            Producto(3, "zoe", "8673674783", "braulio@xpde.com")
-        )
+val clientes = remember {
+    mutableStateListOf<ModeloCliente>(
+
+
+    )
+
     }
 // productos[index] = Producto(principe, 20, 5)
+
+
+    LaunchedEffect(String) {
+        try {
+            val registros = api.getClientes()
+            clientes.clear()
+            clientes.addAll(registros)
+        }
+        catch (e: Exception) {
+            Log.e("API", "Error al cargar produtos: ${e.message}")
+        }
+    }
+
+
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     val scrollState = rememberScrollState()
     Column(
@@ -1338,7 +1390,6 @@ fun LstClientesContent(navController: NavHostController, modifier: Modifier) {
 
         Button(
             onClick = {
-                productos.add(Producto(4, "pedro",  "8781258402", "fdsfs@gmail.com"))
             },
             colors = ButtonDefaults.buttonColors(
                 containerColor = Color.Black,
@@ -1371,27 +1422,42 @@ fun LstClientesContent(navController: NavHostController, modifier: Modifier) {
             Text("Eliminar", modifier = Modifier.width(100.dp), fontWeight = FontWeight.Bold)
         }
         Divider()
-        productos.forEachIndexed { index, producto ->
+        clientes.forEachIndexed { index, cliente -> // <-- 1. Renombrado para claridad
             val bgColor = if (index % 2 == 0) Color(0xFFF5F5F5) else Color.White
 
             Row (
-                modifier = Modifier
-                    .background(bgColor)
+                modifier = Modifier.background(bgColor)
             ) {
-                Text("${producto.idcliente}", modifier = Modifier
-                    .width(150.dp)
-                )
-                Text(producto.nombre, modifier = Modifier
-                    .width(100.dp)
-                )
-                Text(producto.telefono, modifier = Modifier
-                    .width(100.dp)
-                )
-                Text(producto.CorreoElectronico, modifier = Modifier
-                    .width(100.dp)
-                )
+                Text("${cliente.id}", modifier = Modifier.width(150.dp))
+                // 2. Usa 'cliente' para acceder a sus propiedades
+                Text(cliente.nombre, modifier = Modifier.width(100.dp))
+                Text(cliente.telefono, modifier = Modifier.width(100.dp))
+                Text(cliente.correo, modifier = Modifier.width(100.dp))
+
                 Button(onClick = {
-                    productos.removeAt(index)
+                    // 3. Usa la lista 'clientes' para eliminar
+                    val id : Int = clientes[index].id
+
+
+                    scope.launch {
+                        try {
+                            val respuesta = api.eliminarCliente(id = cliente.id)
+                            if (respuesta.isSuccessful){
+                                    Toast.makeText(
+                                        context,
+                                        "Cliente eliminado con exito",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                    clientes.remove(cliente)
+                                }
+
+                            else {
+                                Toast.makeText(context, "Error al eliminar cliente", Toast.LENGTH_SHORT).show()
+                            }
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "Error de conexión: ${e.message}", Toast.LENGTH_SHORT).show()
+                        }
+                    }
                 }) {
                     Text("Eliminar")
                 }
@@ -1660,11 +1726,14 @@ fun LstTrajesContent(navController: NavHostController, modifier: Modifier) {
                     .weight(1.0f))
 
 
-                Button(onClick = {
-                    productos.removeAt(index)
-                },
+                Button(
+                    onClick = {
+                        productos.removeAt(index)
+                    },
                     // Aplica el peso al Button y una altura para controlarlo
-                    modifier = Modifier.weight(0.7f).height(36.dp),
+                    modifier = Modifier
+                        .weight(0.7f)
+                        .height(36.dp),
                     //    contentPadding = PaddingValues(horizontal = 4.dp) // Reduce el padding interno
                 ) {
                     Text("Eliminar", fontSize = 10.sp)
@@ -2048,3 +2117,4 @@ fun AppContentPreview() {
 fun RentaTrajesTheme(content: @Composable () -> Unit) {
     TODO("Not yet implemented")
 }
+
