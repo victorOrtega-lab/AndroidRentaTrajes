@@ -36,6 +36,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -55,20 +56,26 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.navigation.NavController
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.example.rentatrajes.ui.theme.RentaTrajesTheme
+import com.google.gson.annotations.SerializedName
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import retrofit2.Response
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
-import retrofit2.converter.scalars.ScalarsConverterFactory
 import retrofit2.http.Field
 import retrofit2.http.FormUrlEncoded
 import retrofit2.http.GET
 import retrofit2.http.POST
+import retrofit2.http.Query
 import java.util.Calendar
+import retrofit2.http.*
 
 class MainActivity : ComponentActivity() {
     @RequiresApi(Build.VERSION_CODES.O)
@@ -117,6 +124,101 @@ fun AppContent(modifier: Modifier = Modifier) {
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////
+// ────── MODELOS ──────
+// Modelo principal de renta
+data class ModeloRenta(
+    val id_renta: Int,
+    val nombre: String
+)
+
+
+// Modelo principal de cliente
+data class ModeloCliente(
+    val id_cliente: Int,
+    val nombre: String
+)
+
+
+// Respuesta al insertar renta
+data class RespuestaInsert(
+    val status: String,
+    val mensaje: String
+)
+
+// Respuesta de API genérica
+data class RespuestaApi(
+    val status: String,
+    val mensaje: String
+)
+
+// Respuesta de listar rentas
+data class RespuestaRentas(
+    val status: String,
+    val rentas: List<ModeloRenta>
+)
+
+// Respuesta de listar clientes
+data class RespuestaClientes(
+    val status: String,
+    val clientes: List<ModeloCliente>
+)
+
+// ────── API ──────
+
+
+
+interface ApiService {
+
+    @FormUrlEncoded
+    @POST("servicio.php")
+    suspend fun iniciarSesion(
+        @Field("accion") accion: String = "iniciarSesion",
+        @Field("usuario") usuario: String,
+        @Field("contrasena") contrasena: String,
+    ): Response<String>
+
+    @FormUrlEncoded
+    @POST("servicio.php")
+    suspend fun insertarRenta(
+        @Field("accion") accion: String = "insertarRenta",
+        @Field("id_cliente") idCliente: Int
+    ): Response<Respuesta>
+
+
+    @GET("servicio.php?rentas")
+    suspend fun mostrarRentas(): Response<List<ModeloRenta>>
+
+    @FormUrlEncoded
+    @POST("servicio.php?eliminar")
+    suspend fun eliminar(
+        @Field("id_renta") id: Int
+    ): Response<RespuestaSimple>
+
+    @GET("servicio.php?clientes")
+    suspend fun mostrarClientes(): Response<List<ModeloCliente>>
+}
+
+data class Respuesta(
+    val status: String,
+    val mensaje: String
+)
+
+
+data class RespuestaSimple(
+    val status: String
+)
+
+
+val retrofit = Retrofit.Builder()
+    .baseUrl("https://develops-pink-governor-newspaper.trycloudflare.com/api/")
+    .addConverterFactory(GsonConverterFactory.create())
+    .build()
+
+val api = retrofit.create(ApiService::class.java)
+
+
+////////////////////////////////////////////////////////////////////////////////////////////
+
 @Composable
 fun LoginContent(navController: NavHostController, modifier: Modifier) {
 
@@ -126,6 +228,7 @@ fun LoginContent(navController: NavHostController, modifier: Modifier) {
 
     var usuario: String by remember { mutableStateOf("") }
     var contrasena: String by remember { mutableStateOf("") }
+
 
     Column(
         modifier = modifier
@@ -168,7 +271,11 @@ fun LoginContent(navController: NavHostController, modifier: Modifier) {
 
                 scope.launch {
                     try {
-                        val respuesta : Response<String> = api.iniciarSesion(usuario, contrasena )
+                        val respuesta = api.iniciarSesion(
+                            usuario = usuario,
+                            contrasena = contrasena
+                        )
+
                         if (respuesta.body() == "correcto") {
                             Toast.makeText(context, "Inicio de sesión exitoso", Toast.LENGTH_SHORT).show()
                             navController.navigate("menu")
@@ -190,45 +297,6 @@ fun LoginContent(navController: NavHostController, modifier: Modifier) {
 
     }
 }
-
-data class ModeloProducto(
-    val dato1: String,
-    val dato2: Double,
-    val dato3: Int,
-    val usuario: String,
-    val contrasena: String
-
-)
-interface ApiService {
-    @POST("servicio.php?iniciarSesion")
-    @FormUrlEncoded
-    suspend fun iniciarSesion(
-        @Field("usuario") usuario: String,
-        @Field("contrasena") contrasena: String,
-    ): Response<String>
-
-    @GET("servicio.php?productos")
-    suspend fun registros(): List<ModeloProducto>
-
-    @POST("servicio.php?agregarProducto")
-    @FormUrlEncoded
-
-    suspend fun agregarRegistro(
-        @Field("dato1") dato1: String,
-        @Field("dato2") dato2: Double,
-        @Field("dato3") dato3: Int
-    ): Response<Unit>
-}
-
-val retrofit = Retrofit.Builder()
-    .baseUrl("https://newsletter-info-eat-funny.trycloudflare.com/api/")
-    .addConverterFactory(ScalarsConverterFactory.create())
-    .addConverterFactory(GsonConverterFactory.create())
-    .build()
-val api = retrofit.create(ApiService::class.java)
-
-
-
 
 @Composable
 fun MenuContent(navController: NavHostController, modifier: Modifier) {
@@ -1012,29 +1080,40 @@ fun FrmDetalleRentaContent(navController: NavHostController, modifier: Modifier)
 ////////////////   Hector RENTAS  //////////////////////////////////////////////////////
 @Composable
 fun LstRentasContent(navController: NavHostController, modifier: Modifier) {
-    data class Rentas(val idrenta: Int, val idcliente: String)
-    val Rentas = remember {
-        mutableStateListOf(
-            Rentas(1, "Juan"),
-            Rentas(2, "El Sorprendente Raul"),
-            Rentas(3, "Zoe")
-        )
+
+    val rentas = remember { mutableStateListOf<ModeloRenta>() }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    // Cargar rentas desde la API
+    LaunchedEffect(Unit) {
+        try {
+            val respuesta = api.mostrarRentas()
+            if (respuesta.isSuccessful) {
+                val lista = respuesta.body() ?: emptyList()
+                rentas.clear()
+                rentas.addAll(lista)
+            } else {
+                Log.e("API", "Error del servidor: ${respuesta.code()}")
+            }
+        } catch (e: Exception) {
+            Log.e("API", "Error al cargar rentas: ${e.message}")
+        }
     }
 
     val scrollState = rememberScrollState()
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(24.dp)
-            .horizontalScroll(scrollState)
-            .padding(8.dp),
+            .padding(16.dp)
+            .horizontalScroll(scrollState),
         horizontalAlignment = Alignment.Start,
         verticalArrangement = Arrangement.Top
     ) {
+
+        // Botón menú
         Button(
-            onClick = {
-                navController.navigate("menu")
-            },
+            onClick = { navController.navigate("menu") },
             colors = ButtonDefaults.buttonColors(
                 containerColor = Color.Transparent,
                 contentColor = Color.Blue
@@ -1044,17 +1123,15 @@ fun LstRentasContent(navController: NavHostController, modifier: Modifier) {
             Text(
                 "Menu",
                 style = TextStyle(textDecoration = TextDecoration.Underline),
-                textAlign = TextAlign.Start,
                 modifier = Modifier.fillMaxWidth()
             )
         }
+
         Spacer(modifier = Modifier.height(16.dp))
 
-
+        // Botón para ir al formulario
         Button(
-            onClick = {
-                navController.navigate("frmRentas")
-            },
+            onClick = { navController.navigate("frmRentas") },
             colors = ButtonDefaults.buttonColors(
                 containerColor = Color.Transparent,
                 contentColor = Color.Blue
@@ -1064,61 +1141,82 @@ fun LstRentasContent(navController: NavHostController, modifier: Modifier) {
             Text(
                 "Formulario",
                 style = TextStyle(textDecoration = TextDecoration.Underline),
-                textAlign = TextAlign.Start,
                 modifier = Modifier.fillMaxWidth()
             )
         }
-        Spacer(modifier = Modifier.height(16.dp))
 
-        Button(
-            onClick = {
-                Rentas.add(Rentas(4, "Sandra"))
-            },
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color.Black,
-                contentColor = Color.White
-            ),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                "Agregar IDs prueba",
-                style = TextStyle(textDecoration = TextDecoration.Underline),
-                textAlign = TextAlign.Start,
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(
             text = "Rentas",
             fontSize = 20.sp,
-            fontWeight = FontWeight.ExtraBold,
-            modifier = Modifier.align(Alignment.Start)
+            fontWeight = FontWeight.ExtraBold
         )
         Spacer(modifier = Modifier.height(16.dp))
 
+        // Encabezado de tabla
         Row {
-            Text("ID de la Renta", modifier = Modifier.width(150.dp), fontWeight = FontWeight.Bold)
-            Text("Nombre del cliente", modifier = Modifier.width(100.dp), fontWeight = FontWeight.Bold)
+            Text("ID Renta", modifier = Modifier.width(100.dp), fontWeight = FontWeight.Bold)
+            Text("Cliente", modifier = Modifier.width(150.dp), fontWeight = FontWeight.Bold)
+            Text("Editar", modifier = Modifier.width(100.dp), fontWeight = FontWeight.Bold)
             Text("Eliminar", modifier = Modifier.width(100.dp), fontWeight = FontWeight.Bold)
         }
+
         Divider()
-        Rentas.forEachIndexed { index, producto ->
+
+        // Filas de rentas
+        rentas.forEachIndexed { index, renta ->
             val bgColor = if (index % 2 == 0) Color(0xFFF5F5F5) else Color.White
 
-            Row (
+            Row(
                 modifier = Modifier
                     .background(bgColor)
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("${producto.idrenta}", modifier = Modifier
-                    .width(150.dp)
-                )
-                Text("${producto.idcliente}", modifier = Modifier
-                    .width(100.dp)
-                )
+                Text("${renta.id_renta}", modifier = Modifier.width(100.dp))
+                Text(renta.nombre, modifier = Modifier.width(150.dp))
+
+                // Botón Editar: envía el cliente al formulario
                 Button(onClick = {
-                    Rentas.removeAt(index)
-                }) {
+                    // Navegar al formulario pasando el cliente seleccionado
+                    navController.currentBackStackEntry?.savedStateHandle?.set(
+                        "clienteSeleccionado",
+                        renta.nombre
+                    )
+                    navController.navigate("frmRentas")
+                }, modifier = Modifier.width(100.dp)) {
+                    Text("Editar")
+                }
+
+                // Botón Eliminar
+                Button(onClick = {
+                    scope.launch {
+                        try {
+                            val respuesta = api.eliminar(renta.id_renta)
+                            if (respuesta.isSuccessful) {
+                                Toast.makeText(
+                                    context,
+                                    "Renta eliminada con éxito",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                                rentas.remove(renta)
+                            } else {
+                                Toast.makeText(
+                                    context,
+                                    "Error al eliminar",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        } catch (e: Exception) {
+                            Toast.makeText(
+                                context,
+                                "Error de conexión: ${e.message}",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    }
+                }, modifier = Modifier.width(100.dp)) {
                     Text("Eliminar")
                 }
             }
@@ -1128,118 +1226,72 @@ fun LstRentasContent(navController: NavHostController, modifier: Modifier) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FrmRentasContent(navController: NavHostController, modifier: Modifier) {
+fun FrmRentasContent(navController: NavController, modifier: Modifier) {
 
     val context = LocalContext.current
 
-    var idrenta by remember { mutableStateOf("") }
-    var idcliente by remember { mutableStateOf("") }
-
-    val rentasList = listOf("R001", "R002", "R003", "R004")
-    val clientesList = listOf("El Sorprendente Raul", "Zoe", "Lara Horse")
-
-    // Estados para desplegar los menús -----------------------------------------//
-    var expandedRenta by remember { mutableStateOf(false) }
+    val clientesList = remember { mutableStateListOf<ModeloCliente>() }
+    var selectedCliente by remember { mutableStateOf<ModeloCliente?>(null) }
     var expandedCliente by remember { mutableStateOf(false) }
+
+    // Cargar clientes
+    LaunchedEffect(Unit) {
+        val respuestaClientes = api.mostrarClientes()
+        if (respuestaClientes.isSuccessful) {
+            clientesList.clear()
+            clientesList.addAll(respuestaClientes.body() ?: emptyList())
+        }
+    }
 
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(24.dp)
-            .padding(8.dp),
-        horizontalAlignment = Alignment.Start,
-        verticalArrangement = Arrangement.Top
+            .padding(24.dp),
+        horizontalAlignment = Alignment.Start
     ) {
+
         Button(
-            onClick = {
-                navController.navigate("lstRentas")
-            },
+            onClick = { navController.navigate("lstRentas") },
             colors = ButtonDefaults.buttonColors(
                 containerColor = Color.Transparent,
                 contentColor = Color.Blue
             ),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text(
-                "Rentas",
-                style = TextStyle(textDecoration = TextDecoration.Underline),
-                textAlign = TextAlign.Start,
-                modifier = Modifier.fillMaxWidth()
-            )
+            Text("Tabla", style = TextStyle(textDecoration = TextDecoration.Underline))
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(Modifier.height(16.dp))
 
-        Text(
-            text = "Rentas",
-            fontSize = 20.sp,
-            fontWeight = FontWeight.ExtraBold,
-            modifier = Modifier.align(Alignment.CenterHorizontally)
-        )
+        Text("Crear Renta", fontSize = 20.sp, fontWeight = FontWeight.Bold)
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(Modifier.height(16.dp))
 
-//-- Aqui inicia el combo box --------------------------
-        Text(text = "ID de la renta:")
-        ExposedDropdownMenuBox(
-            expanded = expandedRenta,
-            onExpandedChange = { expandedRenta = !expandedRenta }
-        ) {
-            TextField(
-                value = idrenta,
-                onValueChange = {},
-                readOnly = true,
-                label = { Text("Selecciona el ID de la renta") },
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedRenta) },
-                modifier = Modifier
-                    .menuAnchor()
-                    .fillMaxWidth()
-            )
-            ExposedDropdownMenu(
-                expanded = expandedRenta,
-                onDismissRequest = { expandedRenta = false }
-            ) {
-                rentasList.forEach { id ->
-                    DropdownMenuItem(
-                        text = { Text(id) },
-                        onClick = {
-                            idrenta = id
-                            expandedRenta = false
-                        }
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // --- ComboBox para ID del cliente ---
-
-        Text(text = "Nombre del cliente:")
-
+        Text("Nombre del cliente:")
         ExposedDropdownMenuBox(
             expanded = expandedCliente,
             onExpandedChange = { expandedCliente = !expandedCliente }
         ) {
             TextField(
-                value = idcliente,
+                value = selectedCliente?.nombre ?: "",
                 onValueChange = {},
                 readOnly = true,
-                label = { Text("Selecciona el nombre del cliente") },
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedCliente) },
+                label = { Text("Selecciona el cliente") },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expandedCliente) },
                 modifier = Modifier
                     .menuAnchor()
                     .fillMaxWidth()
             )
+
             ExposedDropdownMenu(
                 expanded = expandedCliente,
                 onDismissRequest = { expandedCliente = false }
             ) {
-                clientesList.forEach { id ->
+                clientesList.forEach { cliente ->
                     DropdownMenuItem(
-                        text = { Text(id) },
+                        text = { Text(cliente.nombre) },
                         onClick = {
-                            idcliente = id
+                            selectedCliente = cliente
                             expandedCliente = false
                         }
                     )
@@ -1247,22 +1299,30 @@ fun FrmRentasContent(navController: NavHostController, modifier: Modifier) {
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(Modifier.height(24.dp))
 
+        val scope = rememberCoroutineScope()
 
-        // --- Botón Enviar ---
-        Button(
-            onClick = {
-                Toast.makeText(context, "ID de la Renta: $idrenta", Toast.LENGTH_SHORT).show()
-                Toast.makeText(context, "ID del Cliente: $idcliente", Toast.LENGTH_SHORT).show()
-            },
-            modifier = Modifier.align(Alignment.End)
-        ) {
+        Button(onClick = {
+            val id = selectedCliente?.id_cliente
+            if (id == null) {
+                Toast.makeText(context, "Selecciona un cliente", Toast.LENGTH_SHORT).show()
+                return@Button
+            }
+
+            scope.launch {
+                val resp = api.insertarRenta(idCliente = id)
+                if (resp.isSuccessful) {
+                    Toast.makeText(context, resp.body()?.mensaje ?: "Insertado", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(context, "Error al insertar", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }) {
             Text("Enviar")
         }
     }
 }
-
 
 //////////////////////////////////////////////////////////////////
 
