@@ -125,48 +125,23 @@ fun AppContent(modifier: Modifier = Modifier) {
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 // ────── MODELOS ──────
-// Modelo principal de renta
 data class ModeloRenta(
     val id_renta: Int,
     val nombre: String
 )
-
-
-// Modelo principal de cliente
 data class ModeloCliente(
     val id_cliente: Int,
     val nombre: String
 )
-
-
-// Respuesta al insertar renta
-data class RespuestaInsert(
+data class Respuesta(
     val status: String,
     val mensaje: String
 )
-
-// Respuesta de API genérica
-data class RespuestaApi(
-    val status: String,
-    val mensaje: String
-)
-
-// Respuesta de listar rentas
-data class RespuestaRentas(
-    val status: String,
-    val rentas: List<ModeloRenta>
-)
-
-// Respuesta de listar clientes
-data class RespuestaClientes(
-    val status: String,
-    val clientes: List<ModeloCliente>
+data class RespuestaSimple(
+    val status: String
 )
 
 // ────── API ──────
-
-
-
 interface ApiService {
 
     @FormUrlEncoded
@@ -184,7 +159,6 @@ interface ApiService {
         @Field("id_cliente") idCliente: Int
     ): Response<Respuesta>
 
-
     @GET("servicio.php?rentas")
     suspend fun mostrarRentas(): Response<List<ModeloRenta>>
 
@@ -194,23 +168,20 @@ interface ApiService {
         @Field("id_renta") id: Int
     ): Response<RespuestaSimple>
 
+    @FormUrlEncoded
+    @POST("servicio.php")
+    suspend fun editarRenta(
+        @Field("accion") accion: String = "editarRenta",
+        @Field("id_renta") idRenta: Int,
+        @Field("id_cliente") idCliente: Int
+    ): Response<Respuesta>
+
     @GET("servicio.php?clientes")
     suspend fun mostrarClientes(): Response<List<ModeloCliente>>
 }
 
-data class Respuesta(
-    val status: String,
-    val mensaje: String
-)
-
-
-data class RespuestaSimple(
-    val status: String
-)
-
-
 val retrofit = Retrofit.Builder()
-    .baseUrl("https://develops-pink-governor-newspaper.trycloudflare.com/api/")
+    .baseUrl("https://disco-completing-temple-protocol.trycloudflare.com/api/")
     .addConverterFactory(GsonConverterFactory.create())
     .build()
 
@@ -1178,16 +1149,17 @@ fun LstRentasContent(navController: NavHostController, modifier: Modifier) {
                 Text(renta.nombre, modifier = Modifier.width(150.dp))
 
                 // Botón Editar: envía el cliente al formulario
-                Button(onClick = {
-                    // Navegar al formulario pasando el cliente seleccionado
-                    navController.currentBackStackEntry?.savedStateHandle?.set(
-                        "clienteSeleccionado",
-                        renta.nombre
-                    )
-                    navController.navigate("frmRentas")
-                }, modifier = Modifier.width(100.dp)) {
+                Button(
+                    onClick = {
+                        navController.currentBackStackEntry?.savedStateHandle?.set("idRenta", renta.id_renta)
+                        navController.currentBackStackEntry?.savedStateHandle?.set("nombreCliente", renta.nombre)
+                        navController.navigate("frmRentas")
+                    },
+                    modifier = Modifier.width(100.dp)
+                ) {
                     Text("Editar")
                 }
+
 
                 // Botón Eliminar
                 Button(onClick = {
@@ -1228,6 +1200,14 @@ fun LstRentasContent(navController: NavHostController, modifier: Modifier) {
 @Composable
 fun FrmRentasContent(navController: NavController, modifier: Modifier) {
 
+    val idRenta = navController.previousBackStackEntry
+        ?.savedStateHandle
+        ?.get<Int>("idRenta")
+
+    val nombreClienteEdit = navController.previousBackStackEntry
+        ?.savedStateHandle
+        ?.get<String>("nombreCliente")
+
     val context = LocalContext.current
 
     val clientesList = remember { mutableStateListOf<ModeloCliente>() }
@@ -1240,6 +1220,11 @@ fun FrmRentasContent(navController: NavController, modifier: Modifier) {
         if (respuestaClientes.isSuccessful) {
             clientesList.clear()
             clientesList.addAll(respuestaClientes.body() ?: emptyList())
+
+            // Si estamos editando, seleccionar el cliente actual
+            if (nombreClienteEdit != null) {
+                selectedCliente = clientesList.find { it.nombre == nombreClienteEdit }
+            }
         }
     }
 
@@ -1263,7 +1248,12 @@ fun FrmRentasContent(navController: NavController, modifier: Modifier) {
 
         Spacer(Modifier.height(16.dp))
 
-        Text("Crear Renta", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        Text(
+            if (idRenta == null) "Crear Renta" else "Editar Renta",
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold
+        )
+
 
         Spacer(Modifier.height(16.dp))
 
@@ -1304,23 +1294,30 @@ fun FrmRentasContent(navController: NavController, modifier: Modifier) {
         val scope = rememberCoroutineScope()
 
         Button(onClick = {
-            val id = selectedCliente?.id_cliente
-            if (id == null) {
+            val idCliente = selectedCliente?.id_cliente
+            if (idCliente == null) {
                 Toast.makeText(context, "Selecciona un cliente", Toast.LENGTH_SHORT).show()
                 return@Button
             }
 
             scope.launch {
-                val resp = api.insertarRenta(idCliente = id)
-                if (resp.isSuccessful) {
-                    Toast.makeText(context, resp.body()?.mensaje ?: "Insertado", Toast.LENGTH_SHORT).show()
+                val resp = if (idRenta == null) {
+                    api.insertarRenta(idCliente = idCliente)
                 } else {
-                    Toast.makeText(context, "Error al insertar", Toast.LENGTH_SHORT).show()
+                    api.editarRenta(idRenta = idRenta, idCliente = idCliente)
+                }
+
+                if (resp.isSuccessful) {
+                    Toast.makeText(context, resp.body()?.mensaje ?: "OK", Toast.LENGTH_SHORT).show()
+                    navController.navigate("lstRentas")
+                } else {
+                    Toast.makeText(context, "Error en el servidor", Toast.LENGTH_SHORT).show()
                 }
             }
         }) {
-            Text("Enviar")
+            Text(if (idRenta == null) "Insertar" else "Guardar Cambios")
         }
+
     }
 }
 
