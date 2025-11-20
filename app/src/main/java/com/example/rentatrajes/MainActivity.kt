@@ -484,7 +484,7 @@ data class ModeloTraje(
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 val retrofit = Retrofit.Builder()
-    .baseUrl("https://buyer-takes-layer-forward.trycloudflare.com/api2/")
+    .baseUrl("https://buyer-takes-layer-forward.trycloudflare.com/api/")
     .addConverterFactory(ScalarsConverterFactory.create()) // <- primero
     .addConverterFactory(GsonConverterFactory.create())    // <- luego
     .build()
