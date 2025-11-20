@@ -1,15 +1,20 @@
 package com.example.rentatrajes
+import android.content.Context
+import android.content.SharedPreferences
 
 import android.R
 import android.R.attr.fontWeight
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -56,10 +61,13 @@ import androidx.navigation.compose.rememberNavController
 import com.example.rentatrajes.ui.theme.RentaTrajesTheme
 import androidx.compose.material3.*
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.core.view.WindowCompat.enableEdgeToEdge
 import com.example.rentatrajes.LoginContent
+import com.google.gson.annotations.SerializedName
 import kotlinx.coroutines.launch
 import retrofit2.Response
 import retrofit2.Retrofit
@@ -71,61 +79,424 @@ import retrofit2.http.GET
 import retrofit2.http.POST
 import java.util.Calendar
 
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavController
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
+fun setSessionValue(context: Context, key: String, value: String) {
+    val sharedPrefs: SharedPreferences = context.getSharedPreferences("sharedPrefs", Context.MODE_PRIVATE)
+    val editor = sharedPrefs.edit()
+    editor.putString(key, value)
+    editor.apply()
+}
+
+fun getSessionValue(context: Context, key: String, defaultValue: String): String? {
+    val sharedPrefs: SharedPreferences = context.getSharedPreferences("sharedPrefs", Context.MODE_PRIVATE)
+    return sharedPrefs.getString(key, defaultValue)
+}
 
 
 
-class MainActivity : ComponentActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
-        setContent {
-            RentaTrajesTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) {
-                        innerPadding -> AppContent(
-                    modifier = Modifier.padding(innerPadding)
-                )
-                }
+
+
+class ProveedoresViewModel : ViewModel() {
+
+    private val _proveedores = MutableStateFlow<List<ModeloProveedor>>(emptyList())
+    val proveedores: StateFlow<List<ModeloProveedor>> = _proveedores
+
+    private val _selectedProveedor = MutableStateFlow<ModeloProveedor?>(null)
+    val selectedProveedor: StateFlow<ModeloProveedor?> = _selectedProveedor
+
+    fun cargarProveedores() {
+        viewModelScope.launch {
+            try {
+                val lista = RetrofitClient.api.getProveedores()
+                _proveedores.value = lista
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    fun seleccionarProveedor(p: ModeloProveedor) {
+        _selectedProveedor.value = p
+    }
+
+    fun limpiarSeleccion() {
+        _selectedProveedor.value = null
+    }
+
+    fun agregarProveedor(nombre: String, telefono: String, direccion: String, onComplete: (Boolean) -> Unit) {
+
+        // 🚨 PASO 1: DEBUG ANTES DE ENVIAR 🚨
+        Log.d("DBG_AGREGAR", "ENVIANDO -> nombre='$nombre', telefono='$telefono', direccion='$direccion'")
+
+        viewModelScope.launch {
+            try {
+                val resp = RetrofitClient.api.agregarProveedor(nombre, telefono, direccion)
+
+                val success = resp.isSuccessful && resp.body()?.contains("correcto") == true
+
+                onComplete(success)
+
+                if (success) cargarProveedores()
+
+            } catch (e: Exception) {
+                e.printStackTrace()
+                Log.e("DBG_AGREGAR", "ERROR -> ${e.message}")
+                onComplete(false)
+            }
+        }
+    }
+
+
+    fun modificarProveedor(id: Int, nombre: String, telefono: String, direccion: String, onComplete: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val resp = RetrofitClient.api.modificarProveedor(id.toString(), nombre, telefono, direccion)
+                val success = resp.isSuccessful && resp.body()?.contains("correcto") == true
+                onComplete(success)
+                if (success) cargarProveedores()
+            } catch (e: Exception) {
+                e.printStackTrace()
+                onComplete(false)
+            }
+        }
+    }
+
+    fun eliminarProveedor(id: Int, onComplete: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val resp = RetrofitClient.api.eliminarProveedor(id)
+                val success = resp.isSuccessful && resp.body()?.contains("correcto") == true
+                onComplete(success)
+                if (success) cargarProveedores()
+            } catch (e: Exception) {
+                e.printStackTrace()
+                onComplete(false)
             }
         }
     }
 }
 
-@Composable
-fun AppContent(modifier: Modifier = Modifier) {
-    val navController = rememberNavController()
 
-    NavHost(navController = navController, startDestination = "lstClientes") {
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////77
+
+class TrajesViewModel : ViewModel() {
+
+    private val _trajes = MutableStateFlow<List<ModeloTraje>>(emptyList())
+    val trajes: StateFlow<List<ModeloTraje>> = _trajes
+
+    private val _selectedTraje = MutableStateFlow<ModeloTraje?>(null)
+    val selectedTraje: StateFlow<ModeloTraje?> = _selectedTraje
+
+    fun cargarTrajes() {
+        viewModelScope.launch {
+            try {
+                val lista = RetrofitClient.api.getTrajes()
+                _trajes.value = lista
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    fun seleccionarTraje(t: ModeloTraje) {
+        _selectedTraje.value = t
+    }
+
+    fun limpiarSeleccion() {
+        _selectedTraje.value = null
+    }
+
+    fun agregarTraje(nombre: String, descripcion: String, precio: Float, onComplete: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val resp = RetrofitClient.api.agregarTraje(nombre, descripcion, precio)
+                val success = resp.isSuccessful && resp.body()?.contains("correcto") == true
+                onComplete(success)
+                if (success) cargarTrajes()
+            } catch (e: Exception) {
+                e.printStackTrace()
+                onComplete(false)
+            }
+        }
+    }
+
+    fun modificarTraje(id: Int, nombre: String, descripcion: String, precio: Float, onComplete: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val resp = RetrofitClient.api.modificarTraje(id.toString(), nombre, descripcion, precio)
+                val success = resp.isSuccessful && resp.body()?.contains("correcto") == true
+                onComplete(success)
+                if (success) cargarTrajes()
+            } catch (e: Exception) {
+                e.printStackTrace()
+                onComplete(false)
+            }
+        }
+    }
+
+    fun eliminarTraje(id: Int, onComplete: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val resp = RetrofitClient.api.eliminarTraje(id)
+                val success = resp.isSuccessful && resp.body()?.contains("correcto") == true
+                onComplete(success)
+                if (success) cargarTrajes()
+            } catch (e: Exception) {
+                e.printStackTrace()
+                onComplete(false)
+            }
+        }
+    }
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+class ClientesViewModel : ViewModel() {
+
+    private val _clientes = MutableStateFlow<List<ModeloCliente>>(emptyList())
+    val clientes: StateFlow<List<ModeloCliente>> = _clientes
+
+    private val _selectedCliente = MutableStateFlow<ModeloCliente?>(null)
+    val selectedCliente: StateFlow<ModeloCliente?> = _selectedCliente
+
+    // ------------------- CARGAR CLIENTES -------------------
+    fun cargarClientes() {
+        viewModelScope.launch {
+            try {
+                val lista = RetrofitClient.api.getClientes()
+                _clientes.value = lista
+            } catch (e: Exception) {
+                e.printStackTrace()
+                Log.e("ClientesVM", "Error al cargar clientes: ${e.message}")
+            }
+        }
+    }
+
+    // ------------------- SELECCIONAR / LIMPIAR -------------------
+    fun seleccionarCliente(cliente: ModeloCliente) {
+        _selectedCliente.value = cliente
+    }
+
+    fun limpiarSeleccion() {
+        _selectedCliente.value = null
+    }
+
+    // ------------------- AGREGAR CLIENTE -------------------
+    fun agregarCliente(
+        nombre: String,
+        telefono: String,
+        correo: String,
+        onComplete: (Boolean) -> Unit
+    ) {
+        viewModelScope.launch {
+            try {
+                val resp: Response<String> = RetrofitClient.api.agregarCliente(nombre, telefono, correo)
+                val success = resp.isSuccessful && resp.body()?.contains("correcto") == true
+                onComplete(success)
+                if (success) cargarClientes()
+            } catch (e: Exception) {
+                e.printStackTrace()
+                Log.e("ClientesVM", "Error al agregar cliente: ${e.message}")
+                onComplete(false)
+            }
+        }
+    }
+
+    // ------------------- MODIFICAR CLIENTE -------------------
+    fun modificarCliente(
+        id: Int,
+        nombre: String,
+        telefono: String,
+        correo: String,
+        onComplete: (Boolean) -> Unit
+    ) {
+        viewModelScope.launch {
+            try {
+                val resp: Response<String> = RetrofitClient.api.modificarCliente(id.toString(), nombre, telefono, correo)
+                val success = resp.isSuccessful && resp.body()?.contains("correcto") == true
+                onComplete(success)
+                if (success) cargarClientes()
+            } catch (e: Exception) {
+                e.printStackTrace()
+                Log.e("ClientesVM", "Error al modificar cliente: ${e.message}")
+                onComplete(false)
+            }
+        }
+    }
+
+    // ------------------- ELIMINAR CLIENTE -------------------
+    fun eliminarCliente(id: Int, onComplete: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val resp: Response<String> = RetrofitClient.api.eliminarCliente(id)
+                val success = resp.isSuccessful && resp.body()?.contains("correcto") == true
+                onComplete(success)
+                if (success) cargarClientes()
+            } catch (e: Exception) {
+                e.printStackTrace()
+                Log.e("ClientesVM", "Error al eliminar cliente: ${e.message}")
+                onComplete(false)
+            }
+        }
+    }
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
+class MainActivity : ComponentActivity() {
+
+    private val proveedoresVM: ProveedoresViewModel by viewModels()
+    private val trajesVM: TrajesViewModel by viewModels()
+    private val clientesVM: ClientesViewModel by viewModels() // <-- Nuevo
+
+    @RequiresApi(Build.VERSION_CODES.O)
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        enableEdgeToEdge() // si usas
+        setContent {
+            RentaTrajesTheme {
+                AppContent(
+                    proveedoresVM = proveedoresVM,
+                    trajesVM = trajesVM,
+                    clientesVM = clientesVM // <-- Nuevo
+                )
+            }
+        }
+    }
+}
+
+@RequiresApi(Build.VERSION_CODES.O)
+@Composable
+fun AppContent(
+    modifier: Modifier = Modifier,
+    proveedoresVM: ProveedoresViewModel,
+    trajesVM: TrajesViewModel,
+    clientesVM: ClientesViewModel // <-- Nuevo
+) {
+    val navController = rememberNavController()
+    val context = LocalContext.current
+
+    val sesionIniciada: String? = getSessionValue(context, "sesionIniciada", "no")
+    val startDestination = if (sesionIniciada == "yes") "menu" else "login"
+
+    NavHost(
+        navController = navController,
+        startDestination = startDestination
+    ) {
+
+        // LOGIN y MENU
         composable("login") { LoginContent(navController, modifier) }
         composable("menu") { MenuContent(navController, modifier) }
 
+        // PROVEEDORES
+        composable("lstProveedores") { LstProveedoresContent(navController, proveedoresVM) }
+        composable("frmProveedores") { FrmProveedoresContent(navController, proveedoresVM) }
+
+        // TRAJES
+        composable("lstTrajes") { LstTrajesContent(navController, trajesVM) }
+        composable("frmTrajes") { FrmTrajesContent(navController, trajesVM) }
+
+        // CLIENTES <-- NUEVO
+        composable("lstClientes") { LstClientesContent(navController, clientesVM) }
+        composable("frmClientes") { FrmClientesContent(navController, clientesVM) }
+
+
+        // RENTAS
         composable("lstDetalleVenta") { LstDetalleRentaContent(navController, modifier) }
         composable("frmDetalleVenta") { FrmDetalleRentaContent(navController, modifier) }
-
-        composable("lstProveedores") { LstProveedoresContent(navController, modifier) }
-        composable("frmProveedores") { FrmProveedoresContent(navController, modifier) }
 
         composable("lstRentas") { LstRentasContent(navController, modifier) }
         composable("frmRentas") { FrmRentasContent(navController, modifier) }
 
-        composable("lstClientes") { LstClientesContent(navController, modifier) }
-        composable("frmClientes") { FrmClientesContent(navController, modifier) }
-
-        composable ("lstTrajes") {LstTrajesContent(navController,modifier)}
-        composable ("frmTrajes") {FrmTrajesContent(navController,modifier)}
-
+        // COMENTARIOS
         composable("frmComentarios") { Comentarios(navController, modifier) }
-
     }
 }
 
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// ────── MODELOS RENTA──────
+data class ModeloRenta(
+    val id_renta: Int,
+    val nombre: String
+)
+data class ModeloClienteRenta(
+    val id_cliente: Int,
+    val nombre: String
+)
+data class Respuesta(
+    val status: String,
+    val mensaje: String
+)
+data class RespuestaSimple(
+    val status: String
+)
+
+//───────────────────────────────────
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+data class OpcionCliente(
+    val value: String,
+    val text: String
+)
+data class ModeloCliente(
+    val id: Int,
+    val nombre: String,
+    val telefono: String,
+    val correo: String
+)
+
+
 ///////////////////////////////////////////////////////////////////////////////////////////
+
+data class LoginResponse(
+    val success: Boolean,
+    val message: String
+)
+data class ModeloProveedor(
+    val id: Int,
+    val nombre: String,
+    val telefono: String,
+    val direccion: String
+)
+
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+data class ModeloTraje(
+    val id_traje: Int,
+    val nombre_traje: String,
+    val descripcion: String,
+    val precio: Float
+)
+
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+val retrofit = Retrofit.Builder()
+    .baseUrl("https://buyer-takes-layer-forward.trycloudflare.com/api2/")
+    .addConverterFactory(ScalarsConverterFactory.create()) // <- primero
+    .addConverterFactory(GsonConverterFactory.create())    // <- luego
+    .build()
+
+val api = retrofit.create(ApiService::class.java)
 @Composable
 fun LoginContent(navController: NavHostController, modifier: Modifier) {
 
     val context = LocalContext.current
 
-    var usuario: String by remember { mutableStateOf("") }
-    var contrasena: String by remember { mutableStateOf("") }
+    var usuario by rememberSaveable { mutableStateOf("") }
+    var contrasena by rememberSaveable { mutableStateOf("") }
 
     val scope = rememberCoroutineScope()
 
@@ -165,94 +536,55 @@ fun LoginContent(navController: NavHostController, modifier: Modifier) {
         )
         Spacer(modifier = Modifier.height(24.dp))
 
-        Button (
+        Button(
             colors = ButtonDefaults.buttonColors(
                 containerColor = Color.Black,
                 contentColor = Color.White
             ),
             onClick = {
-                scope.launch {
-                    try {
-                        val respuesta : Response<Unit> = api.IniciarSesion(usuario = usuario , contrasena= contrasena )
-                        if (respuesta.isSuccessful) {
-                            Toast.makeText(context, "Inicio de sesión exitoso", Toast.LENGTH_SHORT).show()
-                            navController.navigate("menu")
-                        } else {
-                            // Muestra el mensaje de error que devuelve el servidor, es más útil para depurar
-                            val mensajeError = respuesta.errorBody() ?.string()?: "Respuesta vacía del servidor"
-                            Toast.makeText(context, "Fallo: $mensajeError", Toast.LENGTH_SHORT).show()
-                            Log.e("API_LOGIN", "Respuesta del servidor: $mensajeError")
 
-                            }
-                        } catch (e: Exception) {
-                        Toast.makeText(context, "Error de conexión: ${e.message}", Toast.LENGTH_SHORT).show()
-                        }
+                if (usuario.isEmpty() || contrasena.isEmpty()) {
+                    Toast.makeText(context, "Faltan datos", Toast.LENGTH_SHORT).show()
+                    return@Button   // <--- CORREGIDO AQUÍ
                 }
 
-            },
-            modifier = Modifier.align(Alignment.End)
+                scope.launch {
+                    try {
+                        val respuesta = api.IniciarSesion(usuario, contrasena)
 
+                        if (respuesta.isSuccessful) {
+                            val body = respuesta.body()
 
+                            if (body != null && body.success) {
+                                Toast.makeText(context, "Inicio correcto", Toast.LENGTH_SHORT).show()
+                                setSessionValue(context, "sesionIniciada", "yes")
+                                navController.navigate("menu")
+                                setSessionValue(context, "sesionIniciada", "yes")
+                            } else {
+                                Toast.makeText(context, body?.message ?: "Datos incorrectos", Toast.LENGTH_SHORT).show()
+                            }
+
+                        } else {
+                            val error = respuesta.errorBody()?.string() ?: "Error del servidor"
+                            Toast.makeText(context, error, Toast.LENGTH_SHORT).show()
+                        }
+
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
         ) {
             Text("Iniciar sesión")
-
-
         }
+
 
     }
 }
 
 
 
-data class ModeloCliente(
-    val id: Int,
-    val nombre: String,
-    val telefono: String,
-    val correo: String,
 
-)
-interface ApiService {
-    @POST("servicio.php")
-    @FormUrlEncoded
-    suspend fun IniciarSesion(
-        @Field("usuario") usuario: String,
-        @Field("contrasena") contrasena: String,
-    ): Response<Unit>
-
-    @GET("servicio.php?clientes")
-    suspend fun getClientes(): List<ModeloCliente>
-
-    @POST("servicio.php?agregarCliente")
-    @FormUrlEncoded
-    suspend fun agregarCliente(
-        @Field("nombre") nombre: String,
-        @Field("telefono") telefono: String,
-        @Field("correo") correo: String
-    ): Response<Unit>
-
-
-    @POST("servicio.php?modificarCliente")
-    @FormUrlEncoded
-    suspend fun modificarCliente(
-        @Field("id") id: String,
-        @Field("nombre") nombre: String,
-        @Field("telefono") telefono: String,
-        @Field("correo") correo: String
-    ): Response<Unit  >
-    @POST("servicio.php?eliminarCliente")
-    @FormUrlEncoded
-    suspend fun eliminarCliente(
-
-        @Field("id") id: Int
-     ): Response<Unit >
-}
-
-val retrofit = Retrofit.Builder()
-    .baseUrl("https://arms-grown-five-bottom.trycloudflare.com/api/")
-    .addConverterFactory(GsonConverterFactory.create())
-    .addConverterFactory(ScalarsConverterFactory.create())
-    .build()
-val api = retrofit.create(ApiService::class.java)
 
 
 @Composable
@@ -421,241 +753,158 @@ fun MenuContent(navController: NavHostController, modifier: Modifier) {
 ////////////////   Angel PROVEEDORES //////////////////////////////////////////////////////
 
 @Composable
-fun LstProveedoresContent(navController: NavHostController, modifier: Modifier) {
-    data class Proveedores(val idprovvedor: Int, val nombre: String, val telefono: String, val direccion: String)
-    val productos = remember {
-        mutableStateListOf(
-            Proveedores(1, "Polo", "5557478399", direccion="25 Mayo #256,col Roman Cepeda"),
-            Proveedores(2, "Versace", "5559834721", direccion="Av. Hidalgo #103, col Centro"),
-            Proveedores(3, "Armani", "5546729103", direccion="Calle Juárez #58, col Las Flores"),
+fun LstProveedoresContent(navController: androidx.navigation.NavHostController, viewModel: ProveedoresViewModel) {
 
-            )
-    }
-// productos[index] = Producto(principe, 20, 5)
-
+    val proveedores by viewModel.proveedores.collectAsState()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
+
+    LaunchedEffect(Unit) { viewModel.cargarProveedores() }
+
     Column(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxSize()
             .padding(24.dp)
             .horizontalScroll(scrollState)
-            .padding(8.dp),
-        horizontalAlignment = Alignment.Start,
-        verticalArrangement = Arrangement.Top
+            .padding(8.dp)
     ) {
-        Button(
-            onClick = {
-                navController.navigate("menu")
-            },
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color.Transparent,
-                contentColor = Color.Blue
-            ),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                "Menu",
-                style = TextStyle(textDecoration = TextDecoration.Underline),
-                textAlign = TextAlign.Start,
-                modifier = Modifier.fillMaxWidth()
-            )
+        Button(onClick = { navController.navigate("menu") }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent, contentColor = Color.Blue)) {
+            Text("Menu")
         }
-        Spacer(modifier = Modifier.height(16.dp))
-
-
-        Button(
-            onClick = {
-                navController.navigate("frmProveedores")
-            },
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color.Transparent,
-                contentColor = Color.Blue
-            ),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                "Formulario",
-                style = TextStyle(textDecoration = TextDecoration.Underline),
-                textAlign = TextAlign.Start,
-                modifier = Modifier.fillMaxWidth()
-            )
+        Spacer(Modifier.height(16.dp))
+        Button(onClick = {
+            viewModel.limpiarSeleccion()
+            navController.navigate("frmProveedores")
+        }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent, contentColor = Color.Blue)) {
+            Text("Agregar Proveedor")
         }
-        Spacer(modifier = Modifier.height(16.dp))
 
-
-
-        Button(
-            onClick = {
-                productos.add(
-                    Proveedores(
-                        4,
-                        "Louis Vuitton",
-                        "5589423765",
-                        direccion = "Av. Presidente Masaryk #350, col Polanco"
-                    ),
-                )
-            },
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color.Black,
-                contentColor = Color.White
-            ),
-            modifier = Modifier.fillMaxWidth()
-
-        ) {
-            Text(
-                "Agregar IDs prueba",
-                style = TextStyle(textDecoration = TextDecoration.Underline),
-                textAlign = TextAlign.Start,
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-        Spacer(modifier = Modifier.height(16.dp))
-        Text(
-            text = "Proveedores",
-            fontSize = 20.sp,
-            fontWeight = FontWeight.ExtraBold,
-            modifier = Modifier.align(Alignment.Start),
-            color = Color.Red
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-
-
+        Spacer(Modifier.height(16.dp))
+        Text("Proveedores", fontSize = MaterialTheme.typography.titleLarge.fontSize, fontWeight = FontWeight.ExtraBold, color = Color.Red)
+        Spacer(Modifier.height(16.dp))
 
         Row {
-            Text("ID Proveedor", modifier = Modifier.width(150.dp), fontWeight = FontWeight.Bold)
-            Text("Nombre de proveedor", modifier = Modifier.width(100.dp), fontWeight = FontWeight.Bold)
-            Text("Telefono", modifier = Modifier.width(100.dp), fontWeight = FontWeight.Bold)
-            Text("Direccion", modifier = Modifier.width(100.dp), fontWeight = FontWeight.Bold)
-            Text("Eliminar", modifier = Modifier.width(100.dp), fontWeight = FontWeight.Bold)
+            Text("ID", Modifier.width(50.dp), fontWeight = FontWeight.Bold)
+            Text("Nombre", Modifier.width(150.dp), fontWeight = FontWeight.Bold)
+            Text("Teléfono", Modifier.width(120.dp), fontWeight = FontWeight.Bold)
+            Text("Dirección", Modifier.width(200.dp), fontWeight = FontWeight.Bold)
+            Text("Eliminar", Modifier.width(100.dp), fontWeight = FontWeight.Bold)
+            Text("Modificar", Modifier.width(100.dp), fontWeight = FontWeight.Bold)
         }
         Divider()
-        productos.forEachIndexed { index, producto ->
+
+        proveedores.forEach { proveedor ->
+            val index = proveedores.indexOf(proveedor)
             val bgColor = if (index % 2 == 0) Color(0xFFF5F5F5) else Color.White
 
-            Row (
-                modifier = Modifier
-                    .background(bgColor)
+            Row(modifier = Modifier
+                .background(bgColor)
+                .padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("${producto.idprovvedor}", modifier = Modifier
-                    .width(150.dp)
-                )
-                Text("${producto.nombre}", modifier = Modifier
-                    .width(100.dp)
-                )
-                Text("${producto.telefono}", modifier = Modifier
-                    .width(100.dp)
-                )
-                Text("${producto.direccion}", modifier = Modifier
-                    .width(100.dp)
-                )
+                Text("${proveedor.id}", Modifier.width(50.dp))
+                Text("${proveedor.nombre}", Modifier.width(150.dp))
+                Text("${proveedor.telefono}", Modifier.width(120.dp))
+                Text("${proveedor.direccion}", Modifier.width(200.dp))
+
                 Button(onClick = {
-                    productos.removeAt(index)
-                }) {
-                    Text("Eliminar")
-                }
+                    scope.launch {
+                        viewModel.eliminarProveedor(proveedor.id) { success ->
+                            android.widget.Toast.makeText(context, if (success) "Proveedor eliminado" else "Error al eliminar", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }, modifier = Modifier.width(100.dp)) { Text("Eliminar") }
+
+                Spacer(modifier = Modifier.width(4.dp))
+
+                Button(onClick = {
+                    viewModel.seleccionarProveedor(proveedor)
+                    navController.navigate("frmProveedores")
+                }, modifier = Modifier.width(100.dp)) { Text("Modificar") }
             }
         }
     }
 }
 
+
+
+
 @Composable
-fun FrmProveedoresContent(navController: NavHostController, modifier: Modifier) {
+fun FrmProveedoresContent(navController: androidx.navigation.NavHostController, viewModel: ProveedoresViewModel) {
 
+    val proveedorSeleccionado by viewModel.selectedProveedor.collectAsState()
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
-    var idproveedor: String by remember { mutableStateOf("") }
-    var nombre: String by remember { mutableStateOf("") }
-    var telefono: String by remember { mutableStateOf("") }
-    var direccion: String by remember { mutableStateOf("") }
+    var nombre by remember { mutableStateOf(proveedorSeleccionado?.nombre ?: "") }
+    var telefono by remember { mutableStateOf(proveedorSeleccionado?.telefono ?: "") }
+    var direccion by remember { mutableStateOf(proveedorSeleccionado?.direccion ?: "") }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(24.dp)
-            .padding(8.dp),
-        horizontalAlignment = Alignment.Start,
-        verticalArrangement = Arrangement.Top
-    ) {
-        Button(
-            onClick = {
-                navController.navigate("lstProveedores")
-            },
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color.Transparent,
-                contentColor = Color.Blue
-            ),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                "Proveedores",
-                style = TextStyle(textDecoration = TextDecoration.Underline),
-                textAlign = TextAlign.Start,
-                modifier = Modifier.fillMaxWidth()
-            )
+    LaunchedEffect(proveedorSeleccionado) {
+        nombre = proveedorSeleccionado?.nombre ?: ""
+        telefono = proveedorSeleccionado?.telefono ?: ""
+        direccion = proveedorSeleccionado?.direccion ?: ""
+    }
+
+    val isEditMode = proveedorSeleccionado != null
+
+    Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
+        Button(onClick = { navController.navigate("lstProveedores") }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent, contentColor = Color.Blue)) {
+            Text("Lista Proveedores")
         }
+
+        Spacer(modifier = Modifier.height(16.dp))
+        Text("Formulario de Proveedores", style = MaterialTheme.typography.titleLarge)
         Spacer(modifier = Modifier.height(16.dp))
 
-        Text(
-            text = "Proveedores",
-            fontSize = 20.sp,
-            fontWeight = FontWeight.ExtraBold,
-            modifier = Modifier.align(Alignment.CenterHorizontally)
-        )
+        if (isEditMode) {
+            Text("ID del proveedor:")
+            TextField(value = proveedorSeleccionado?.id.toString() ?: "", onValueChange = {}, readOnly = true, modifier = Modifier.fillMaxWidth())
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        Text("Nombre:")
+        TextField(value = nombre, onValueChange = { nombre = it }, modifier = Modifier.fillMaxWidth())
         Spacer(modifier = Modifier.height(16.dp))
 
-        Text(text = "ID del proveedor:")
-        TextField(
-            value = idproveedor,
-            onValueChange = { idproveedor = it },
-            placeholder = { Text("Ingresa el ID del proveedor") },
-            modifier = Modifier.fillMaxWidth()
-        )
+        Text("Teléfono:")
+        TextField(value = telefono, onValueChange = { telefono = it }, modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone))
         Spacer(modifier = Modifier.height(16.dp))
 
-        Text(text = "Nombre del proveedor:")
-        TextField(
-            value = nombre,
-            onValueChange = { nombre = it },
-            placeholder = { Text("Ingresa el nombre del proveedor") },
-            modifier = Modifier.fillMaxWidth(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-        )
+        Text("Dirección:")
+        TextField(value = direccion, onValueChange = { direccion = it }, modifier = Modifier.fillMaxWidth())
         Spacer(modifier = Modifier.height(16.dp))
 
-        Text(text = "Telefono:")
-        TextField(
-            value = telefono    ,
-            onValueChange = { telefono = it },
-            placeholder = { Text("Ingresa el telefono del proveedor") },
-            modifier = Modifier.fillMaxWidth(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Text(text = "Direccion:")
-        TextField(
-            value = direccion    ,
-            onValueChange = { direccion = it },
-            placeholder = { Text("Ingresa la direccion del proveedor") },
-            modifier = Modifier.fillMaxWidth(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Button(
-            onClick = {
-                Toast.makeText(context, "Nombre: ${idproveedor}", Toast.LENGTH_SHORT).show()
-                Toast.makeText(context, "Precio: ${nombre   }", Toast.LENGTH_SHORT).show()
-                Toast.makeText(context, "Existencias: ${telefono}", Toast.LENGTH_SHORT).show()
-                Toast.makeText(context, "Existencias: ${direccion}", Toast.LENGTH_SHORT).show()
-
-            },
-            modifier = Modifier.align(Alignment.End)
-        ) {
-            Text("Enviar")
+        Button(onClick = {
+            scope.launch {
+                if (isEditMode) {
+                    val id = proveedorSeleccionado!!.id
+                    viewModel.modificarProveedor(id, nombre, telefono, direccion) { success ->
+                        android.widget.Toast.makeText(context, if (success) "Proveedor modificado" else "Error al modificar", android.widget.Toast.LENGTH_SHORT).show()
+                        if (success) {
+                            viewModel.limpiarSeleccion()
+                            navController.navigate("lstProveedores") { popUpTo("lstProveedores") { inclusive = true } }
+                        }
+                    }
+                } else {
+                    viewModel.agregarProveedor(nombre, telefono, direccion) { success ->
+                        android.widget.Toast.makeText(context, if (success) "Proveedor agregado" else "Error al agregar", android.widget.Toast.LENGTH_SHORT).show()
+                        if (success) {
+                            viewModel.limpiarSeleccion()
+                            navController.navigate("lstProveedores") { popUpTo("lstProveedores") { inclusive = true } }
+                        }
+                    }
+                }
+            }
+        }, modifier = Modifier.align(Alignment.End)) {
+            Text(if (isEditMode) "Guardar Cambios" else "Agregar Proveedor")
         }
     }
 }
+
+
+
 
 
 //////////////////////////////////////////////////////////////////
@@ -1053,32 +1302,46 @@ fun FrmDetalleRentaContent(navController: NavHostController, modifier: Modifier)
 }
 //////////////////////////////////////////////////////////////////
 
+
+/////////////////////////////////////////////////////////////////////////////////////////
 ////////////////   Hector RENTAS  //////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////
 @Composable
 fun LstRentasContent(navController: NavHostController, modifier: Modifier) {
-    data class Rentas(val idrenta: Int, val idcliente: String)
-    val Rentas = remember {
-        mutableStateListOf(
-            Rentas(1, "Juan"),
-            Rentas(2, "El Sorprendente Raul"),
-            Rentas(3, "Zoe")
-        )
+
+    val rentas = remember { mutableStateListOf<ModeloRenta>() }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    // Cargar rentas desde la API
+    LaunchedEffect(Unit) {
+        try {
+            val respuesta = api.mostrarRentas()
+            if (respuesta.isSuccessful) {
+                val lista = respuesta.body() ?: emptyList()
+                rentas.clear()
+                rentas.addAll(lista)
+            } else {
+                Log.e("API", "Error del servidor: ${respuesta.code()}")
+            }
+        } catch (e: Exception) {
+            Log.e("API", "Error al cargar rentas: ${e.message}")
+        }
     }
 
     val scrollState = rememberScrollState()
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(24.dp)
-            .horizontalScroll(scrollState)
-            .padding(8.dp),
+            .padding(16.dp)
+            .horizontalScroll(scrollState),
         horizontalAlignment = Alignment.Start,
         verticalArrangement = Arrangement.Top
     ) {
+
+        // Botón menú
         Button(
-            onClick = {
-                navController.navigate("menu")
-            },
+            onClick = { navController.navigate("menu") },
             colors = ButtonDefaults.buttonColors(
                 containerColor = Color.Transparent,
                 contentColor = Color.Blue
@@ -1088,17 +1351,15 @@ fun LstRentasContent(navController: NavHostController, modifier: Modifier) {
             Text(
                 "Menu",
                 style = TextStyle(textDecoration = TextDecoration.Underline),
-                textAlign = TextAlign.Start,
                 modifier = Modifier.fillMaxWidth()
             )
         }
+
         Spacer(modifier = Modifier.height(16.dp))
 
-
+        // Botón para ir al formulario
         Button(
-            onClick = {
-                navController.navigate("frmRentas")
-            },
+            onClick = { navController.navigate("frmRentas") },
             colors = ButtonDefaults.buttonColors(
                 containerColor = Color.Transparent,
                 contentColor = Color.Blue
@@ -1108,61 +1369,83 @@ fun LstRentasContent(navController: NavHostController, modifier: Modifier) {
             Text(
                 "Formulario",
                 style = TextStyle(textDecoration = TextDecoration.Underline),
-                textAlign = TextAlign.Start,
                 modifier = Modifier.fillMaxWidth()
             )
         }
-        Spacer(modifier = Modifier.height(16.dp))
 
-        Button(
-            onClick = {
-                Rentas.add(Rentas(4, "Sandra"))
-            },
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color.Black,
-                contentColor = Color.White
-            ),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                "Agregar IDs prueba",
-                style = TextStyle(textDecoration = TextDecoration.Underline),
-                textAlign = TextAlign.Start,
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(
             text = "Rentas",
             fontSize = 20.sp,
-            fontWeight = FontWeight.ExtraBold,
-            modifier = Modifier.align(Alignment.Start)
+            fontWeight = FontWeight.ExtraBold
         )
         Spacer(modifier = Modifier.height(16.dp))
 
+        // Encabezado de tabla
         Row {
-            Text("ID de la Renta", modifier = Modifier.width(150.dp), fontWeight = FontWeight.Bold)
-            Text("Nombre del cliente", modifier = Modifier.width(100.dp), fontWeight = FontWeight.Bold)
+            Text("ID Renta", modifier = Modifier.width(100.dp), fontWeight = FontWeight.Bold)
+            Text("Cliente", modifier = Modifier.width(150.dp), fontWeight = FontWeight.Bold)
+            Text("Editar", modifier = Modifier.width(100.dp), fontWeight = FontWeight.Bold)
             Text("Eliminar", modifier = Modifier.width(100.dp), fontWeight = FontWeight.Bold)
         }
+
         Divider()
-        Rentas.forEachIndexed { index, producto ->
+
+        // Filas de rentas
+        rentas.forEachIndexed { index, renta ->
             val bgColor = if (index % 2 == 0) Color(0xFFF5F5F5) else Color.White
 
-            Row (
+            Row(
                 modifier = Modifier
                     .background(bgColor)
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("${producto.idrenta}", modifier = Modifier
-                    .width(150.dp)
-                )
-                Text("${producto.idcliente}", modifier = Modifier
-                    .width(100.dp)
-                )
+                Text("${renta.id_renta}", modifier = Modifier.width(100.dp))
+                Text(renta.nombre, modifier = Modifier.width(150.dp))
+
+                // Botón Editar: envía el cliente al formulario
+                Button(
+                    onClick = {
+                        navController.currentBackStackEntry?.savedStateHandle?.set("idRenta", renta.id_renta)
+                        navController.currentBackStackEntry?.savedStateHandle?.set("nombreCliente", renta.nombre)
+                        navController.navigate("frmRentas")
+                    },
+                    modifier = Modifier.width(100.dp)
+                ) {
+                    Text("Editar")
+                }
+
+
+                // Botón Eliminar
                 Button(onClick = {
-                    Rentas.removeAt(index)
-                }) {
+                    scope.launch {
+                        try {
+                            val respuesta = api.eliminar(renta.id_renta)
+                            if (respuesta.isSuccessful) {
+                                Toast.makeText(
+                                    context,
+                                    "Renta eliminada con éxito",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                                rentas.remove(renta)
+                            } else {
+                                Toast.makeText(
+                                    context,
+                                    "Error al eliminar",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        } catch (e: Exception) {
+                            Toast.makeText(
+                                context,
+                                "Error de conexión: ${e.message}",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    }
+                }, modifier = Modifier.width(100.dp)) {
                     Text("Eliminar")
                 }
             }
@@ -1172,118 +1455,89 @@ fun LstRentasContent(navController: NavHostController, modifier: Modifier) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FrmRentasContent(navController: NavHostController, modifier: Modifier) {
+fun FrmRentasContent(navController: NavController, modifier: Modifier) {
+
+    val idRenta = navController.previousBackStackEntry
+        ?.savedStateHandle
+        ?.get<Int>("idRenta")
+
+    val nombreClienteEdit = navController.previousBackStackEntry
+        ?.savedStateHandle
+        ?.get<String>("nombreCliente")
 
     val context = LocalContext.current
 
-    var idrenta by remember { mutableStateOf("") }
-    var idcliente by remember { mutableStateOf("") }
-
-    val rentasList = listOf("R001", "R002", "R003", "R004")
-    val clientesList = listOf("El Sorprendente Raul", "Zoe", "Lara Horse")
-
-    // Estados para desplegar los menús -----------------------------------------//
-    var expandedRenta by remember { mutableStateOf(false) }
+    val clientesList = remember { mutableStateListOf<ModeloClienteRenta>() }
+    var selectedCliente by remember { mutableStateOf<ModeloClienteRenta?>(null) }
     var expandedCliente by remember { mutableStateOf(false) }
+
+    // Cargar clientes
+    LaunchedEffect(Unit) {
+        val respuestaClientes = api.mostrarClientes()
+        if (respuestaClientes.isSuccessful) {
+            clientesList.clear()
+            clientesList.addAll(respuestaClientes.body() ?: emptyList())
+
+            if (nombreClienteEdit != null) {
+                selectedCliente = clientesList.find { it.nombre == nombreClienteEdit }
+            }
+        }
+    }
 
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(24.dp)
-            .padding(8.dp),
-        horizontalAlignment = Alignment.Start,
-        verticalArrangement = Arrangement.Top
+            .padding(24.dp),
+        horizontalAlignment = Alignment.Start
     ) {
+
         Button(
-            onClick = {
-                navController.navigate("lstRentas")
-            },
+            onClick = { navController.navigate("lstRentas") },
             colors = ButtonDefaults.buttonColors(
                 containerColor = Color.Transparent,
                 contentColor = Color.Blue
             ),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text(
-                "Rentas",
-                style = TextStyle(textDecoration = TextDecoration.Underline),
-                textAlign = TextAlign.Start,
-                modifier = Modifier.fillMaxWidth()
-            )
+            Text("Tabla", style = TextStyle(textDecoration = TextDecoration.Underline))
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(Modifier.height(16.dp))
 
         Text(
-            text = "Rentas",
+            if (idRenta == null) "Crear Renta" else "Editar Renta",
             fontSize = 20.sp,
-            fontWeight = FontWeight.ExtraBold,
-            modifier = Modifier.align(Alignment.CenterHorizontally)
+            fontWeight = FontWeight.Bold
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
 
+        Spacer(Modifier.height(16.dp))
 
-        Text(text = "ID de la renta:")
-        ExposedDropdownMenuBox(
-            expanded = expandedRenta,
-            onExpandedChange = { expandedRenta = !expandedRenta }
-        ) {
-            TextField(
-                value = idrenta,
-                onValueChange = {},
-                readOnly = true,
-                label = { Text("Selecciona el ID de la renta") },
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedRenta) },
-                modifier = Modifier
-                    .menuAnchor()
-                    .fillMaxWidth()
-            )
-            ExposedDropdownMenu(
-                expanded = expandedRenta,
-                onDismissRequest = { expandedRenta = false }
-            ) {
-                rentasList.forEach { id ->
-                    DropdownMenuItem(
-                        text = { Text(id) },
-                        onClick = {
-                            idrenta = id
-                            expandedRenta = false
-                        }
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // --- ComboBox para ID del cliente ---
-
-        Text(text = "Nombre del cliente:")
-
+        Text("Nombre del cliente:")
         ExposedDropdownMenuBox(
             expanded = expandedCliente,
             onExpandedChange = { expandedCliente = !expandedCliente }
         ) {
             TextField(
-                value = idcliente,
+                value = selectedCliente?.nombre ?: "",
                 onValueChange = {},
                 readOnly = true,
-                label = { Text("Selecciona el nombre del cliente") },
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedCliente) },
+                label = { Text("Selecciona el cliente") },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expandedCliente) },
                 modifier = Modifier
                     .menuAnchor()
                     .fillMaxWidth()
             )
+
             ExposedDropdownMenu(
                 expanded = expandedCliente,
                 onDismissRequest = { expandedCliente = false }
             ) {
-                clientesList.forEach { id ->
+                clientesList.forEach { cliente ->
                     DropdownMenuItem(
-                        text = { Text(id) },
+                        text = { Text(cliente.nombre) },
                         onClick = {
-                            idcliente = id
+                            selectedCliente = cliente
                             expandedCliente = false
                         }
                     )
@@ -1291,458 +1545,372 @@ fun FrmRentasContent(navController: NavHostController, modifier: Modifier) {
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(Modifier.height(24.dp))
 
+        val scope = rememberCoroutineScope()
 
-        // --- Botón Enviar ---
-        Button(
-            onClick = {
-                Toast.makeText(context, "ID de la Renta: $idrenta", Toast.LENGTH_SHORT).show()
-                Toast.makeText(context, "ID del Cliente: $idcliente", Toast.LENGTH_SHORT).show()
-            },
-            modifier = Modifier.align(Alignment.End)
-        ) {
-            Text("Enviar")
+        Button(onClick = {
+            val idCliente = selectedCliente?.id_cliente
+            if (idCliente == null) {
+                Toast.makeText(context, "Selecciona un cliente", Toast.LENGTH_SHORT).show()
+                return@Button
+            }
+
+            scope.launch {
+                val resp = if (idRenta == null) {
+                    api.insertarRenta(idCliente = idCliente)
+                } else {
+                    api.editarRenta(idRenta = idRenta, idCliente = idCliente)
+                }
+
+                if (resp.isSuccessful) {
+                    Toast.makeText(context, resp.body()?.mensaje ?: "OK", Toast.LENGTH_SHORT).show()
+                    navController.navigate("lstRentas")
+                } else {
+                    Toast.makeText(context, "Error en el servidor", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }) {
+            Text(if (idRenta == null) "Insertar" else "Guardar Cambios")
         }
+
     }
 }
-
-
 //////////////////////////////////////////////////////////////////
 
 ////////////////   Big-tour CLIENTES  //////////////////////////////////////////////////////
 @Composable
-fun LstClientesContent(navController: NavHostController, modifier: Modifier) {
-val clientes = remember {
-    mutableStateListOf<ModeloCliente>(
+fun LstClientesContent(navController: NavHostController, viewModel: ClientesViewModel) {
 
-
-    )
-
-    }
-// productos[index] = Producto(principe, 20, 5)
-
-
-    LaunchedEffect(String) {
-        try {
-            val registros = api.getClientes()
-            clientes.clear()
-            clientes.addAll(registros)
-        }
-        catch (e: Exception) {
-            Log.e("API", "Error al cargar produtos: ${e.message}")
-        }
-    }
-
-
-    val scope = rememberCoroutineScope()
+    val clientes by viewModel.clientes.collectAsState()
     val context = LocalContext.current
-
+    val scope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
+
+    LaunchedEffect(Unit) { viewModel.cargarClientes() }
+
     Column(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxSize()
             .padding(24.dp)
             .horizontalScroll(scrollState)
             .padding(8.dp),
-        horizontalAlignment = Alignment.Start,
-        verticalArrangement = Arrangement.Top
+        horizontalAlignment = Alignment.Start
     ) {
-        Button(
-            onClick = {
-                navController.navigate("menu")
-            },
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color.Transparent,
-                contentColor = Color.Blue
-            ),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                "Menu",
-                style = TextStyle(textDecoration = TextDecoration.Underline),
-                textAlign = TextAlign.Start,
-                modifier = Modifier.fillMaxWidth()
-            )
+        Button(onClick = { navController.navigate("menu") }, modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent, contentColor = Color.Blue)) {
+            Text("Menu")
         }
-        Spacer(modifier = Modifier.height(16.dp))
-
-
-        Button(
-            onClick = {
-                navController.navigate("frmClientes")
-            },
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color.Transparent,
-                contentColor = Color.Blue
-            ),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                "Formulario",
-                style = TextStyle(textDecoration = TextDecoration.Underline),
-                textAlign = TextAlign.Start,
-                modifier = Modifier.fillMaxWidth()
-            )
+        Spacer(Modifier.height(16.dp))
+        Button(onClick = {
+            viewModel.limpiarSeleccion()
+            navController.navigate("frmClientes")
+        }, modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent, contentColor = Color.Blue)) {
+            Text("Agregar Cliente")
         }
-        Spacer(modifier = Modifier.height(16.dp))
 
+        Spacer(Modifier.height(16.dp))
+        Text("Clientes", fontSize = MaterialTheme.typography.titleLarge.fontSize, fontWeight = FontWeight.ExtraBold, color = Color.Red)
+        Spacer(Modifier.height(16.dp))
 
-        Button(
-            onClick = {
-            },
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color.Black,
-                contentColor = Color.White
-            ),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                "Agregar Clientes  prueba",
-                style = TextStyle(textDecoration = TextDecoration.Underline),
-                textAlign = TextAlign.Start,
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Text(
-            text = "Clientes",
-            fontSize = 20.sp,
-            fontWeight = FontWeight.ExtraBold,
-            modifier = Modifier.align(Alignment.Start),
-            color = Color.Red
-        )
-        Spacer(modifier = Modifier.height(16.dp))
         Row {
-            Text("ID Cliente", modifier = Modifier.width(150.dp), fontWeight = FontWeight.Bold)
-            Text("Nombre", modifier = Modifier.width(100.dp), fontWeight = FontWeight.Bold)
-            Text("Telefono", modifier = Modifier.width(100.dp), fontWeight = FontWeight.Bold)
-            Text("Correo Electroníco", modifier = Modifier.width(100.dp), fontWeight = FontWeight.Bold)
-            Text("Eliminar", modifier = Modifier.width(100.dp), fontWeight = FontWeight.Bold)
+            Text("ID", Modifier.width(50.dp), fontWeight = FontWeight.Bold)
+            Text("Nombre", Modifier.width(150.dp), fontWeight = FontWeight.Bold)
+            Text("Teléfono", Modifier.width(120.dp), fontWeight = FontWeight.Bold)
+            Text("Correo", Modifier.width(200.dp), fontWeight = FontWeight.Bold)
+            Text("Eliminar", Modifier.width(100.dp), fontWeight = FontWeight.Bold)
+            Text("Modificar", Modifier.width(100.dp), fontWeight = FontWeight.Bold)
         }
         Divider()
-        clientes.forEachIndexed { index, cliente -> // <-- 1. Renombrado para claridad
+
+        clientes.forEach { cliente ->
+            val index = clientes.indexOf(cliente)
             val bgColor = if (index % 2 == 0) Color(0xFFF5F5F5) else Color.White
 
-            Row (
-                modifier = Modifier.background(bgColor)
+            Row(modifier = Modifier
+                .background(bgColor)
+                .padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("${cliente.id}", modifier = Modifier.width(150.dp))
-                // 2. Usa 'cliente' para acceder a sus propiedades
-                Text(cliente.nombre, modifier = Modifier.width(100.dp))
-                Text(cliente.telefono, modifier = Modifier.width(100.dp))
-                Text(cliente.correo, modifier = Modifier.width(100.dp))
+                Text("${cliente.id}", Modifier.width(50.dp))
+                Text(cliente.nombre, Modifier.width(150.dp))
+                Text(cliente.telefono, Modifier.width(120.dp))
+                Text(cliente.correo, Modifier.width(200.dp))
 
                 Button(onClick = {
-                    // 3. Usa la lista 'clientes' para eliminar
-                    val id : Int = clientes[index].id
-
-
                     scope.launch {
-                        try {
-                            val respuesta = api.eliminarCliente(id = cliente.id)
-                            if (respuesta.isSuccessful){
-                                    Toast.makeText(
-                                        context,
-                                        "Cliente eliminado con exito",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                    clientes.remove(cliente)
-                                }
-
-                            else {
-                                Toast.makeText(context, "Error al eliminar cliente", Toast.LENGTH_SHORT).show()
-                            }
-                        } catch (e: Exception) {
-                            Toast.makeText(context, "Error de conexión: ${e.message}", Toast.LENGTH_SHORT).show()
+                        viewModel.eliminarCliente(cliente.id) { success ->
+                            Toast.makeText(context, if (success) "Cliente eliminado" else "Error al eliminar", Toast.LENGTH_SHORT).show()
                         }
                     }
-                }) {
-                    Text("Eliminar")
-                }
+                }, modifier = Modifier.width(100.dp)) { Text("Eliminar") }
 
+                Spacer(modifier = Modifier.width(4.dp))
+
+                Button(onClick = {
+                    viewModel.seleccionarCliente(cliente)
+                    navController.navigate("frmClientes")
+                }, modifier = Modifier.width(100.dp)) { Text("Modificar") }
             }
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+
+
 @Composable
-fun FrmClientesContent(navController: NavHostController, modifier: Modifier) {
+fun FrmClientesContent(navController: NavHostController, viewModel: ClientesViewModel) {
 
+    val clienteSeleccionado by viewModel.selectedCliente.collectAsState()
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
-    var idrenta by remember { mutableStateOf("") }
-    var idcliente by remember { mutableStateOf("") }
-    var idtraje by remember { mutableStateOf("") }
+    var nombre by remember { mutableStateOf(clienteSeleccionado?.nombre ?: "") }
+    var telefono by remember { mutableStateOf(clienteSeleccionado?.telefono ?: "") }
+    var correo by remember { mutableStateOf(clienteSeleccionado?.correo ?: "") }
 
-    // Lista de clientes (puedes obtenerla dinámicamente de una BD)
-    val listaClientes = listOf("1 - Juan", "2 - El sorprendente raul", "3 - Zoe")
+    LaunchedEffect(clienteSeleccionado) {
+        nombre = clienteSeleccionado?.nombre ?: ""
+        telefono = clienteSeleccionado?.telefono ?: ""
+        correo = clienteSeleccionado?.correo ?: ""
+    }
 
-    var expanded by remember { mutableStateOf(false) }
-    var selectedCliente by remember { mutableStateOf("") }
+    val isEditMode = clienteSeleccionado != null
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(24.dp)
-            .padding(8.dp),
-        horizontalAlignment = Alignment.Start,
-        verticalArrangement = Arrangement.Top
-    ) {
-        Button(
-            onClick = {
-                navController.navigate("lstClientes")
-            },
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color.Transparent,
-                contentColor = Color.Blue
-            ),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                "Clientes",
-                style = TextStyle(textDecoration = TextDecoration.Underline),
-                textAlign = TextAlign.Start,
-                modifier = Modifier.fillMaxWidth()
-            )
+    Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
+        Button(onClick = { navController.navigate("lstClientes") }, modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent, contentColor = Color.Blue)) {
+            Text("Lista Clientes")
         }
 
         Spacer(modifier = Modifier.height(16.dp))
-
-        Text(
-            text = "Clientes",
-            fontSize = 20.sp,
-            fontWeight = FontWeight.ExtraBold,
-            modifier = Modifier.align(Alignment.CenterHorizontally)
-        )
-
+        Text(if (isEditMode) "Editar Cliente" else "Agregar Cliente", style = MaterialTheme.typography.titleLarge)
         Spacer(modifier = Modifier.height(16.dp))
 
-        // 🔽 ID de la Renta
-        Text(text = "ID de la Renta:")
-        TextField(
-            value = idrenta,
-            onValueChange = { idrenta = it },
-            placeholder = { Text("Ingresa el ID de la renta") },
-            modifier = Modifier.fillMaxWidth()
-        )
+        if (isEditMode) {
+            Text("ID del cliente:")
+            TextField(value = clienteSeleccionado?.id.toString() ?: "", onValueChange = {}, readOnly = true, modifier = Modifier.fillMaxWidth())
+            Spacer(modifier = Modifier.height(16.dp))
+        }
 
+        Text("Nombre:")
+        TextField(value = nombre, onValueChange = { nombre = it }, modifier = Modifier.fillMaxWidth())
         Spacer(modifier = Modifier.height(16.dp))
 
-        // 🔽 ComboBox para ID del Cliente
-        Text(text = "ID del Cliente:")
-        ExposedDropdownMenuBox(
-            expanded = expanded,
-            onExpandedChange = { expanded = !expanded }
-        ) {
-            TextField(
-                value = selectedCliente,
-                onValueChange = {},
-                readOnly = true,
-                placeholder = { Text("Selecciona un cliente") },
-                trailingIcon = {
-                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
-                },
-                modifier = Modifier
-                    .menuAnchor()
-                    .fillMaxWidth()
-            )
-            ExposedDropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false }
-            ) {
-                listaClientes.forEach { cliente ->
-                    DropdownMenuItem(
-                        text = { Text(cliente) },
-                        onClick = {
-                            selectedCliente = cliente
-                            expanded = false
-                            // Si quieres extraer el ID:
-                            idcliente = cliente.substringBefore(" - ")
+        Text("Teléfono:")
+        TextField(value = telefono, onValueChange = { telefono = it }, modifier = Modifier.fillMaxWidth(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone))
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text("Correo:")
+        TextField(value = correo, onValueChange = { correo = it }, modifier = Modifier.fillMaxWidth(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email))
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Button(onClick = {
+            scope.launch {
+                if (isEditMode) {
+                    val id = clienteSeleccionado!!.id
+                    viewModel.modificarCliente(id, nombre, telefono, correo) { success ->
+                        Toast.makeText(context, if (success) "Cliente modificado" else "Error al modificar", Toast.LENGTH_SHORT).show()
+                        if (success) {
+                            viewModel.limpiarSeleccion()
+                            navController.navigate("lstClientes") { popUpTo("lstClientes") { inclusive = true } }
                         }
-                    )
+                    }
+                } else {
+                    viewModel.agregarCliente(nombre, telefono, correo) { success ->
+                        Toast.makeText(context, if (success) "Cliente agregado" else "Error al agregar", Toast.LENGTH_SHORT).show()
+                        if (success) {
+                            viewModel.limpiarSeleccion()
+                            navController.navigate("lstClientes") { popUpTo("lstClientes") { inclusive = true } }
+                        }
+                    }
                 }
             }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // 🔽 Teléfono
-        Text(text = "Teléfono:")
-        TextField(
-            value = idtraje,
-            onValueChange = { idtraje = it },
-            placeholder = { Text("Ingresa el teléfono") },
-            modifier = Modifier.fillMaxWidth(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // 🔽 Correo electrónico
-        Text(text = "Correo Electrónico:")
-        TextField(
-            value = "",
-            onValueChange = {},
-            placeholder = { Text("Ingresa el correo electrónico") },
-            modifier = Modifier.fillMaxWidth(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Button(
-            onClick = {
-                Toast.makeText(context, "ID Renta: $idrenta", Toast.LENGTH_SHORT).show()
-                Toast.makeText(context, "Cliente: $idcliente", Toast.LENGTH_SHORT).show()
-                Toast.makeText(context, "Teléfono: $idtraje", Toast.LENGTH_SHORT).show()
-            },
-            modifier = Modifier.align(Alignment.End)
-        ) {
-            Text("Enviar")
+        }, modifier = Modifier.align(Alignment.End)) {
+            Text(if (isEditMode) "Guardar Cambios" else "Agregar Cliente")
         }
     }
 }
+
 
 //////////////////////////////////////////////////////////////////
 
-////////////////   Sofi TRAJES  //////////////////////////////////////////////////////
+////////////////   Sofi TRAJES  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 @Composable
-fun LstTrajesContent(navController: NavHostController, modifier: Modifier) {
-    data class Producto(val idTraje: Int, val nombreTraje: String, val descripcion: String, val precio: Float)
-    val productos = remember {
-        mutableStateListOf(
-            Producto(1, "Traje de gala", "Clásico corte slim fit, perfecto para bodas.", precio = 600.99f),
-            Producto(2, "traje de lino",  "Ligero y fresco, ideal para verano.",520.99f),
-            Producto(3, "Smoking negro", "Para eventos formales y alfombras rojas.", 650.99f)
-        )
-    }
-// productos[index] = Producto(principe, 20, 5)
+fun LstTrajesContent(navController: NavHostController, viewModel: TrajesViewModel) {
+    val trajes by viewModel.trajes.collectAsState()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
-    val scrollState = rememberScrollState()
+    LaunchedEffect(Unit) { viewModel.cargarTrajes() }
+
+    val scrollVertical = rememberScrollState()
+    val scrollHorizontal = rememberScrollState()
+
     Column(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(scrollVertical)
             .padding(24.dp)
-            ///          .horizontalScroll(scrollState)
-            .padding(8.dp),
-        horizontalAlignment = Alignment.Start,
-        verticalArrangement = Arrangement.Top
     ) {
-        Button(
-            onClick = {
-                navController.navigate("menu")
-            },
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color.Transparent,
-                contentColor = Color.Blue
-            ),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                "Menu",
-                style = TextStyle(textDecoration = TextDecoration.Underline),
-                textAlign = TextAlign.Start,
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-        Spacer(modifier = Modifier.height(16.dp))
 
+        Button(
+            onClick = { navController.navigate("menu") },
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent, contentColor = Color.Blue)
+        ) { Text("Menu") }
+        Spacer(Modifier.height(16.dp))
 
         Button(
             onClick = {
+                viewModel.limpiarSeleccion()
                 navController.navigate("frmTrajes")
             },
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color.Transparent,
-                contentColor = Color.Blue
-            ),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                "Formulario",
-                style = TextStyle(textDecoration = TextDecoration.Underline),
-                textAlign = TextAlign.Start,
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-        Spacer(modifier = Modifier.height(16.dp))
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent, contentColor = Color.Blue)
+        ) { Text("Agregar Traje") }
+        Spacer(Modifier.height(16.dp))
 
-
-        Button(
-            onClick = {
-                productos.add(Producto(4, "smoking azul", "para eventos formales",680.50f))
-            },
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color.Black,
-                contentColor = Color.White
-            ),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                "Agregar traje prueba",
-                style = TextStyle(textDecoration = TextDecoration.Underline),
-                textAlign = TextAlign.Start,
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-        Spacer(modifier = Modifier.height(16.dp))
         Text(
-            text = "Trajes",
-            fontSize = 20.sp,
+            "Trajes",
+            fontSize = MaterialTheme.typography.titleLarge.fontSize,
             fontWeight = FontWeight.ExtraBold,
-            modifier = Modifier.align(Alignment.Start),
             color = Color.Red
         )
-        Spacer(modifier = Modifier.height(16.dp))
-        Row (modifier = Modifier.fillMaxWidth())   {
-            Text("ID de traje", modifier = Modifier.weight(0.8f), fontWeight = FontWeight.Bold)
-            Text("Nombre", modifier = Modifier.weight(1.0f), fontWeight = FontWeight.Bold)
-            Text("Descripcion", modifier = Modifier.weight(2.0f), fontWeight = FontWeight.Bold)
-            Text("precio", modifier = Modifier.weight(1.0f), fontWeight = FontWeight.Bold)
-            Text("Eliminar", modifier = Modifier.weight(0.7f), fontWeight = FontWeight.Bold)
-        }
-        Divider()
-        productos.forEachIndexed { index, producto ->
-            val bgColor = if (index % 2 == 0) Color(0xFFF5F5F5) else Color.White
+        Spacer(Modifier.height(16.dp))
 
-            Row (
-                modifier = Modifier
-                    .background(bgColor)
-            ) {
-                Text("${producto.idTraje}", modifier = Modifier
-                    .weight(0.8f)
-                )
-                Text(producto.nombreTraje, modifier = Modifier
-                    .weight(1.0f)
-                )
-                Text(producto.descripcion, modifier = Modifier
-                    .weight(2.0f)
-                )
-                Text(String.format("$%.2f", producto.precio), modifier = Modifier
-                    .weight(1.0f))
+        // ✨ Scroll horizontal para la tabla
+        Column(modifier = Modifier.horizontalScroll(scrollHorizontal)) {
 
+            Row {
+                Text("ID", Modifier.width(50.dp), fontWeight = FontWeight.Bold)
+                Text("Nombre", Modifier.width(150.dp), fontWeight = FontWeight.Bold)
+                Text("Descripción", Modifier.width(200.dp), fontWeight = FontWeight.Bold)
+                Text("Precio", Modifier.width(100.dp), fontWeight = FontWeight.Bold)
+                Text("Eliminar", Modifier.width(100.dp), fontWeight = FontWeight.Bold)
+                Text("Modificar", Modifier.width(100.dp), fontWeight = FontWeight.Bold)
+            }
+            Divider()
 
-                Button(
-                    onClick = {
-                        productos.removeAt(index)
-                    },
-                    // Aplica el peso al Button y una altura para controlarlo
+            trajes.forEach { traje ->
+                val index = trajes.indexOf(traje)
+                val bgColor = if (index % 2 == 0) Color(0xFFF5F5F5) else Color.White
+
+                Row(
                     modifier = Modifier
-                        .weight(0.7f)
-                        .height(36.dp),
-                    //    contentPadding = PaddingValues(horizontal = 4.dp) // Reduce el padding interno
+                        .background(bgColor)
+                        .padding(vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Eliminar", fontSize = 10.sp)
+                    Text("${traje.id_traje}", Modifier.width(50.dp))
+                    Text("${traje.nombre_traje}", Modifier.width(150.dp))
+                    Text("${traje.descripcion}", Modifier.width(200.dp))
+                    Text(String.format("$%.2f", traje.precio), Modifier.width(100.dp))
+
+                    Button(
+                        onClick = {
+                            scope.launch {
+                                viewModel.eliminarTraje(traje.id_traje) { success ->
+                                    Toast.makeText(context, if (success) "Traje eliminado" else "Error al eliminar", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        },
+                        modifier = Modifier.width(100.dp)
+                    ) { Text("Eliminar") }
+
+                    Spacer(Modifier.width(4.dp))
+
+                    Button(
+                        onClick = {
+                            viewModel.seleccionarTraje(traje)
+                            navController.navigate("frmTrajes")
+                        },
+                        modifier = Modifier.width(100.dp)
+                    ) { Text("Modificar") }
                 }
             }
         }
     }
 }
 
+
+
+@Composable
+fun FrmTrajesContent(navController: NavHostController, viewModel: TrajesViewModel) {
+    val trajeSeleccionado by viewModel.selectedTraje.collectAsState()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    var nombre by remember { mutableStateOf(trajeSeleccionado?.nombre_traje ?: "") }
+    var descripcion by remember { mutableStateOf(trajeSeleccionado?.descripcion ?: "") }
+    var precio by remember { mutableStateOf(trajeSeleccionado?.precio?.toString() ?: "") }
+
+    LaunchedEffect(trajeSeleccionado) {
+        nombre = trajeSeleccionado?.nombre_traje ?: ""
+        descripcion = trajeSeleccionado?.descripcion ?: ""
+        precio = trajeSeleccionado?.precio?.toString() ?: ""
+    }
+
+    val isEditMode = trajeSeleccionado != null
+
+    Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
+        Button(onClick = { navController.navigate("lstTrajes") }, modifier = Modifier.fillMaxWidth()) { Text("Lista Trajes") }
+        Spacer(Modifier.height(16.dp))
+        Text("Formulario de Trajes", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
+        Spacer(Modifier.height(16.dp))
+
+        if (isEditMode) {
+            Text("ID del traje:")
+            TextField(value = trajeSeleccionado?.id_traje.toString(), onValueChange = {}, readOnly = true, modifier = Modifier.fillMaxWidth())
+            Spacer(Modifier.height(16.dp))
+        }
+
+        Text("Nombre del traje:")
+        TextField(value = nombre, onValueChange = { nombre = it }, modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(16.dp))
+
+        Text("Descripción:")
+        TextField(value = descripcion, onValueChange = { descripcion = it }, modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(16.dp))
+
+        Text("Precio:")
+        TextField(value = precio, onValueChange = { precio = it }, modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+        Spacer(Modifier.height(16.dp))
+
+        Button(onClick = {
+            scope.launch {
+                val precioFloat = precio.toFloatOrNull() ?: 0f
+                if (isEditMode) {
+                    viewModel.modificarTraje(trajeSeleccionado!!.id_traje, nombre, descripcion, precioFloat) { success ->
+                        Toast.makeText(context, if (success) "Traje modificado" else "Error al modificar", Toast.LENGTH_SHORT).show()
+                        if (success) {
+                            viewModel.limpiarSeleccion()
+                            navController.navigate("lstTrajes") { popUpTo("lstTrajes") { inclusive = true } }
+                        }
+                    }
+                } else {
+                    viewModel.agregarTraje(nombre, descripcion, precioFloat) { success ->
+                        Toast.makeText(context, if (success) "Traje agregado" else "Error al agregar", Toast.LENGTH_SHORT).show()
+                        if (success) {
+                            viewModel.limpiarSeleccion()
+                            navController.navigate("lstTrajes") { popUpTo("lstTrajes") { inclusive = true } }
+                        }
+                    }
+                }
+            }
+        }, modifier = Modifier.align(Alignment.End)) {
+            Text(if (isEditMode) "Guardar Cambios" else "Agregar Traje")
+        }
+    }
+}
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+@RequiresApi(Build.VERSION_CODES.O)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun Comentarios(navController: NavHostController, modifier: Modifier) {
@@ -1996,122 +2164,7 @@ fun Comentarios(navController: NavHostController, modifier: Modifier) {
     }
 }
 
-@Composable
-fun FrmTrajesContent(navController: NavHostController, modifier: Modifier) {
 
-    val context = LocalContext.current
-
-    var idTraje: String by remember { mutableStateOf("") }
-    var nombreTraje: String by remember { mutableStateOf("") }
-    var descripcion: String by remember { mutableStateOf("") }
-    var precio: String by remember { mutableStateOf("") }
-
-
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(24.dp)
-            .padding(8.dp),
-        horizontalAlignment = Alignment.Start,
-        verticalArrangement = Arrangement.Top
-    ) {
-        Button(
-            onClick = {
-                navController.navigate("lstTrajes")
-            },
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color.Transparent,
-                contentColor = Color.Blue
-            ),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                "trajes",
-                style = TextStyle(textDecoration = TextDecoration.Underline),
-                textAlign = TextAlign.Start,
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Text(
-            text = "Trajes",
-            fontSize = 20.sp,
-            fontWeight = FontWeight.ExtraBold,
-            modifier = Modifier.align(Alignment.CenterHorizontally)
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Text(text = "ID del traje:")
-        TextField(
-            value = idTraje,
-            onValueChange = { idTraje = it },
-            placeholder = { Text("Ingresa el ID del traje") },
-            modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Text(text = "nombre del traje:")
-        TextField(
-            value = nombreTraje,
-            onValueChange = { nombreTraje = it },
-            placeholder = { Text("Ingresa el nombre del traje") },
-            modifier = Modifier.fillMaxWidth(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-        )
-
-
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Text(text = "Descripción:")
-        TextField(
-            value = descripcion,
-            onValueChange = { descripcion = it },
-            placeholder = { Text("Ingresa la descripción") },
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Text(text = "Precio:")
-        TextField(
-            value = precio,
-            onValueChange = { precio = it },
-            placeholder = { Text("Ingresa el precio") },
-            modifier = Modifier.fillMaxWidth(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-        )
-
-
-
-
-        Button(
-            onClick = {
-                Toast.makeText(context, "ID: $idTraje", Toast.LENGTH_SHORT).show()
-                Toast.makeText(context, "Nombre: $nombreTraje", Toast.LENGTH_SHORT).show()
-                Toast.makeText(context, "Descripción: $descripcion", Toast.LENGTH_SHORT).show()
-                Toast.makeText(context, "Precio: $precio", Toast.LENGTH_SHORT).show()
-            },
-            modifier = Modifier.align(Alignment.End)
-        )
-
-        {
-            Text("Enviar")
-        }
-    }
-}
-
-//////////////////////////////////////////////////////////////////
-
-
-@Preview(showBackground = true)
-@Composable
-fun AppContentPreview() {
-    RentaTrajesTheme {
-        AppContent()
-    }
-}
 
 @Composable
 fun RentaTrajesTheme(content: @Composable () -> Unit) {
