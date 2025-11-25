@@ -7,7 +7,7 @@ import retrofit2.converter.gson.GsonConverterFactory
 object RetrofitClient {
 
     // Asegúrate que termina en "/"
-    private const val BASE_URL = "https://buyer-takes-layer-forward.trycloudflare.com/api/"
+    private const val BASE_URL = "https://sanyo-scanned-tahoe-capable.trycloudflare.com/api/"
 
     val api: ApiService by lazy {
         Retrofit.Builder()

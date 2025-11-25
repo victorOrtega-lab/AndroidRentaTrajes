@@ -131,6 +131,24 @@ suspend fun IniciarSesion(
     @GET("servicio.php?clientesRentas")
     suspend fun mostrarClientes(): Response<List<ModeloClienteRenta>>
 
+    /////////////////////////////////////
+//--------------- COMENTARIOS
+    //-- Mostrar comentarios ---//
+    @GET("servicio.php?comentarios")
+    suspend fun mostrarComentarios(): Response<List<ModeloComentario>>
+
+    @FormUrlEncoded
+    @POST("servicio.php?agregarComentario")
+    suspend fun insertarComentario(
+        @Field("comentario") comentario: String
+    ): Response<RespuestaSimple>
+
+    @FormUrlEncoded
+    @POST("servicio.php?eliminarComentario")
+    suspend fun eliminarComentario(
+        @Field("id_comentario") id: Int
+    ): Response<RespuestaSimple>
+
 
 
 }

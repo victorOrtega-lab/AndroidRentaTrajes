@@ -419,13 +419,19 @@ fun AppContent(
         composable("frmRentas") { FrmRentasContent(navController, modifier) }
 
         // COMENTARIOS
-        composable("frmComentarios") { Comentarios(navController, modifier) }
+        composable("PantallaComentarios") { PantallaComentarios(api, navController) }
     }
 }
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// ------- COMENTARIOS -------------//
+data class ModeloComentario(
+    val id_comentario: Int,
+    val comentario: String
+)
 
+///////////////////////////////////////////////////////////////////////////////////////////////////
 // ────── MODELOS RENTA──────
 data class ModeloRenta(
     val id_renta: Int,
@@ -484,7 +490,7 @@ data class ModeloTraje(
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 val retrofit = Retrofit.Builder()
-    .baseUrl("https://buyer-takes-layer-forward.trycloudflare.com/api/")
+    .baseUrl("https://sanyo-scanned-tahoe-capable.trycloudflare.com/api/")
     .addConverterFactory(ScalarsConverterFactory.create()) // <- primero
     .addConverterFactory(GsonConverterFactory.create())    // <- luego
     .build()
@@ -731,7 +737,7 @@ fun MenuContent(navController: NavHostController, modifier: Modifier) {
 
         Button(
             onClick = {
-                navController.navigate("frmComentarios")
+                navController.navigate("PantallaComentarios")
             },
             colors = ButtonDefaults.buttonColors(
                 containerColor = Color.Black,
@@ -1910,260 +1916,195 @@ fun FrmTrajesContent(navController: NavHostController, viewModel: TrajesViewMode
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-@RequiresApi(Build.VERSION_CODES.O)
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun Comentarios(navController: NavHostController, modifier: Modifier) {
+fun PantallaComentarios(api: ApiService, navController: NavHostController) {
 
-    val context = LocalContext.current
+    val listaComentarios = remember { mutableStateListOf<ModeloComentario>() }
+    val contexto = LocalContext.current
+    val scope = rememberCoroutineScope()
 
-    var nombre: String by remember { mutableStateOf("") }
-    var descripcion: String by remember { mutableStateOf("") }
-    var fecha: String by remember { mutableStateOf("") }
-    var traje: String by remember { mutableStateOf("") }
+    var cargando by remember { mutableStateOf(true) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    // Campo del formulario
+    var nuevoComentario by remember { mutableStateOf("") }
+
+    // ---- FUNCIÓN PARA RECARGAR COMENTARIOS ----
+    fun cargarComentarios() {
+        scope.launch {
+            try {
+                val respuesta = api.mostrarComentarios()
+                if (respuesta.isSuccessful) {
+                    val datos = respuesta.body() ?: emptyList()
+                    listaComentarios.clear()
+                    listaComentarios.addAll(datos)
+                } else {
+                    error = "Error del servidor"
+                }
+            } catch (e: Exception) {
+                error = "Error: ${e.message}"
+            }
+            cargando = false
+        }
+    }
+
+    // Cargar al abrir
+    LaunchedEffect(Unit) { cargarComentarios() }
 
     Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(24.dp)
-            .padding(8.dp),
-        horizontalAlignment = Alignment.Start,
-        verticalArrangement = Arrangement.Top
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp)
     ) {
 
         Button(
-            onClick = { navController.navigate("Menu") },
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color.Transparent,
-                contentColor = Color.Blue
-            ),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                "Menú",
-                style = TextStyle(textDecoration = TextDecoration.Underline),
-                textAlign = TextAlign.Start,
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
+            onClick = { navController.navigate("menu") },
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent, contentColor = Color.Blue)
+        ) { Text("Menu") }
+        Spacer(Modifier.height(16.dp))
 
         Text(
-            text = "Comentarios",
-            fontSize = 40.sp,
-            fontWeight = FontWeight.ExtraLight,
-            modifier = Modifier.align(Alignment.CenterHorizontally)
+            "Comentarios",
+            fontWeight = FontWeight.Bold,
+            fontSize = 20.sp,
+            modifier = Modifier.padding(bottom = 12.dp)
         )
-        Spacer(modifier = Modifier.height(30.dp))
 
-        //------------------------------------------------------------
-
-        Text(text = "Nombre del Usuario:")
-        TextField(
-            value = nombre,
-            onValueChange = { nombre = it },
-            placeholder = { Text("Ingresa el nombre del usuario") },
+        // ------------------ FORMULARIO PARA AGREGAR ------------------
+        OutlinedTextField(
+            value = nuevoComentario,
+            onValueChange = { nuevoComentario = it },
+            label = { Text("Nuevo comentario") },
             modifier = Modifier.fillMaxWidth()
         )
-        Spacer(modifier = Modifier.height(25.dp))
 
-        //------------------------------------------------------------
+        Button(
+            onClick = {
+                if (nuevoComentario.isNotBlank()) {
+                    scope.launch {
+                        try {
+                            val resp = api.insertarComentario(nuevoComentario)
+                            if (resp.isSuccessful && resp.body()?.status == "ok") {
 
-        Text(text = "Comentario:")
-        TextField(
-            value = descripcion,
-            onValueChange = { descripcion = it },
-            placeholder = { Text("Ingresa su comentario") },
-            modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(modifier = Modifier.height(25.dp))
+                                Toast.makeText(
+                                    contexto,
+                                    "Comentario agregado",
+                                    Toast.LENGTH_SHORT
+                                ).show()
 
-        //------------------------------------------------------------
+                                nuevoComentario = ""
+                                cargarComentarios()
 
-        // Estados para desplegar los menús -----------------------------------------//
-        var expandedtraje by remember { mutableStateOf(false) }
-
-        // Asignar valores al combo box ---------------------------------------------//
-        val trajeList = listOf("Saco guindo", "pantalon negro", "camisa morada")
-
-        Text(text = "Traje:")
-
-        ExposedDropdownMenuBox(
-            expanded = expandedtraje,
-            onExpandedChange = { expandedtraje = !expandedtraje }
-        ) {
-            TextField(
-                value = traje,
-                onValueChange = {},
-                readOnly = true,
-                label = { Text("Selecciona el traje") },
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedtraje) },
-                modifier = Modifier
-                    .menuAnchor()
-                    .fillMaxWidth()
-            )
-            ExposedDropdownMenu(
-                expanded = expandedtraje,
-                onDismissRequest = { expandedtraje = false }
-            ) {
-                trajeList.forEach { id ->
-                    DropdownMenuItem(
-                        text = { Text(id) },
-                        onClick = {
-                            traje = id
-                            expandedtraje = false
+                            } else {
+                                Toast.makeText(
+                                    contexto,
+                                    "Error al agregar",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        } catch (e: Exception) {
+                            Toast.makeText(
+                                contexto,
+                                "Error: ${e.message}",
+                                Toast.LENGTH_SHORT
+                            ).show()
                         }
-                    )
+                    }
                 }
-            }
+            },
+            modifier = Modifier
+                .padding(top = 8.dp)
+                .fillMaxWidth()
+        ) {
+            Text("Agregar comentario")
         }
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        //------------------------------------------------------------
+        // ------------------ TABLA ------------------
+        when {
+            cargando -> Text("Cargando comentarios...")
 
-        // Fecha/Hora
-        Text(text = "Fecha/Hora:")
-        OutlinedTextField(
-            value = fecha,
-            onValueChange = { },
-            placeholder = { Text("Seleccione fecha y hora") },
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable {
-                    val calendar = Calendar.getInstance()
-                    val datePickerDialog = DatePickerDialog(
-                        context,
-                        { _, year, month, dayOfMonth ->
-                            calendar.set(year, month, dayOfMonth)
-                            val timePickerDialog = TimePickerDialog(
-                                context,
-                                { _, hourOfDay, minute ->
-                                    calendar.set(Calendar.HOUR_OF_DAY, hourOfDay)
-                                    calendar.set(Calendar.MINUTE, minute)
-                                    fecha = String.format(
-                                        "%04d-%02d-%02d %02d:%02d",
-                                        calendar.get(Calendar.YEAR),
-                                        calendar.get(Calendar.MONTH) + 1,
-                                        calendar.get(Calendar.DAY_OF_MONTH),
-                                        calendar.get(Calendar.HOUR_OF_DAY),
-                                        calendar.get(Calendar.MINUTE)
-                                    )
-                                },
-                                calendar.get(Calendar.HOUR_OF_DAY),
-                                calendar.get(Calendar.MINUTE),
-                                true
-                            )
-                            timePickerDialog.show()
-                        },
-                        calendar.get(Calendar.YEAR),
-                        calendar.get(Calendar.MONTH),
-                        calendar.get(Calendar.DAY_OF_MONTH)
-                    )
-                    datePickerDialog.show()
-                },
-            enabled = false
-        )
-        Spacer(modifier = Modifier.height(50.dp))
+            error != null -> Text("Ocurrió un error: $error", color = Color.Red)
 
-        //------------------------------------------------------------
-
-
-        Button(
-            onClick = {
-                Toast.makeText(context, "ID de la Renta: $nombre", Toast.LENGTH_SHORT).show()
-                Toast.makeText(context, "ID del Cliente: $descripcion", Toast.LENGTH_SHORT).show()
-            },
-            modifier = Modifier.align(Alignment.CenterHorizontally)
-        ) {
-            Text("Enviar")
-        }
-
-
-        //------------------------------------------------------------
-        val scrollState = rememberScrollState()
-
-        Column(
-            modifier = modifier
-                .horizontalScroll(scrollState)
-                .padding(8.dp),
-            horizontalAlignment = Alignment.Start,
-            verticalArrangement = Arrangement.Top
-        ) {
-
-            data class tabla(
-                val nombretxt: String,
-                val comentariotxt: String,
-                val trajetxt: String,
-                val fechatxt: String
-            )
-
-            val tabla = remember {
-                mutableStateListOf(
-                    tabla("Juan", "Muy buen producto", "Pantalon negro", "22-10-25"),
-                    tabla("Raul", "100% recomendado", "camisa morada", "26-10-25"),
-                    tabla("Zoe", "Lo volveria a rentar", "zapatos cafes", "23-10-25")
-                )
-            }
-
-            Row {
-                Text(
-                    "Nombre del usuario",
-                    modifier = Modifier.width(150.dp),
-                    fontWeight = FontWeight.Bold
-                )
-                Text("Comenatrio", modifier = Modifier.width(100.dp), fontWeight = FontWeight.Bold)
-                Text("Traje", modifier = Modifier.width(100.dp), fontWeight = FontWeight.Bold)
-                Text("Fecha", modifier = Modifier.width(100.dp), fontWeight = FontWeight.Bold)
-            }
-
-            Divider()
-            tabla.forEachIndexed { index, producto ->
-                val bgColor = if (index % 2 == 0) Color(0xFFF5F5F5) else Color.White
-
+            else -> {
+                // Encabezados
                 Row(
                     modifier = Modifier
-                        .background(bgColor)
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp)
                 ) {
-                    Text(
-                        "${producto.nombretxt}", modifier = Modifier
-                            .width(150.dp)
-                    )
-                    Text(
-                        "${producto.comentariotxt}", modifier = Modifier
-                            .width(100.dp)
-                    )
-                    Text(
-                        "${producto.trajetxt}", modifier = Modifier
-                            .width(100.dp)
-                    )
-                    Text(
-                        "${producto.fechatxt}", modifier = Modifier
-                            .width(100.dp)
-                    )
-                    Button(onClick = {
-                        tabla.removeAt(index)
+                    Text("ID", modifier = Modifier.width(80.dp), fontWeight = FontWeight.Bold)
+                    Text("Comentario", modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold)
+                    Text("Eliminar", modifier = Modifier.width(100.dp), fontWeight = FontWeight.Bold)
+                }
 
-                    }) {
-                        Text("Eliminar")
+                Divider()
+
+                // Filas
+                listaComentarios.forEachIndexed { index, comentario ->
+
+                    val bgColor =
+                        if (index % 2 == 0) Color(0xFFF5F5F5) else Color.White
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(bgColor)
+                            .padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+
+                        Text("${comentario.id_comentario}", modifier = Modifier.width(80.dp))
+
+                        Text(
+                            comentario.comentario,
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        // ------------ BOTÓN ELIMINAR ------------
+                        Button(
+                            onClick = {
+                                scope.launch {
+                                    try {
+                                        val resp = api.eliminarComentario(comentario.id_comentario)
+                                        if (resp.isSuccessful && resp.body()?.status == "ok") {
+
+                                            Toast.makeText(
+                                                contexto,
+                                                "Un hater menos",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+
+                                            listaComentarios.remove(comentario)
+
+                                        } else {
+                                            Toast.makeText(
+                                                contexto,
+                                                "No se pudo eliminar",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                        }
+                                    } catch (e: Exception) {
+                                        Toast.makeText(
+                                            contexto,
+                                            "Error: ${e.message}",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                }
+                            },
+                            modifier = Modifier.width(100.dp)
+                        ) {
+                            Text("Eliminar")
+                        }
                     }
-
-                    Button(onClick = {
-                        tabla.get(index)
-                        Toast.makeText(context, "ID de la Renta: $nombre", Toast.LENGTH_SHORT).show()
-
-                    }) {
-                        Text("Mostrar")
-                    }
-
                 }
             }
         }
-        //------------------------------------------------------------
     }
 }
-
 
 
 @Composable
