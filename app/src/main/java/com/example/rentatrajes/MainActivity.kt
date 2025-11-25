@@ -19,6 +19,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -79,6 +80,10 @@ import retrofit2.http.GET
 import retrofit2.http.POST
 import java.util.Calendar
 
+import androidx.lifecycle.viewModelScope
+
+import kotlinx.coroutines.launch
+
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -86,6 +91,14 @@ import androidx.navigation.NavController
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+
+import com.example.rentatrajes.RetrofitClient
+import com.example.rentatrajes.ApiService
+
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.viewModelScope
+import com.example.rentatrajes.RetrofitClient.api
 fun setSessionValue(context: Context, key: String, value: String) {
     val sharedPrefs: SharedPreferences = context.getSharedPreferences("sharedPrefs", Context.MODE_PRIVATE)
     val editor = sharedPrefs.edit()
@@ -351,13 +364,131 @@ class ClientesViewModel : ViewModel() {
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+class DetalleRentaViewModel : ViewModel() {
+
+    private val _detalles = MutableStateFlow<List<ModeloDetalleRenta>>(emptyList())
+    val detalles: StateFlow<List<ModeloDetalleRenta>> = _detalles
+
+    fun cargarDetalles(idRenta: Int? = null) {
+        viewModelScope.launch {
+            try {
+                val resp = RetrofitClient.api.getDetalleRenta(idRenta)
+                if (resp.isSuccessful) {
+                    _detalles.value = resp.body() ?: emptyList()
+                } else {
+                    _detalles.value = emptyList()
+                }
+            } catch (e: Exception) {
+                _detalles.value = emptyList()
+            }
+        }
+    }
+
+    fun insertarDetalle(
+        idRenta: Int,
+        idTraje: Int,
+        precio: Double?,
+        descripcion: String,
+        fechaInicio: String?,
+        fechaFin: String?,
+        onComplete: (Boolean, String?) -> Unit
+    ) {
+        viewModelScope.launch {
+            try {
+                // --- LOG para debug ---
+                Log.d("DBG_INSERTAR_DETALLE", "ENVIANDO -> idRenta=$idRenta, idTraje=$idTraje, precio=$precio, descripcion='$descripcion', fechaInicio='$fechaInicio', fechaFin='$fechaFin'")
+
+                val resp = RetrofitClient.api.insertarDetalle(
+                    idRenta = idRenta,
+                    idTraje = idTraje,
+                    precio = precio?.toString(),
+                    descripcion = descripcion,
+                    fechaHoraInicio = fechaInicio, // nombres exactos del ApiService
+                    fechaHoraFin = fechaFin
+                )
+
+                if (resp.isSuccessful) {
+                    val body = resp.body()
+                    val ok = body?.status == "ok"
+                    if (ok) cargarDetalles(idRenta)
+                    onComplete(ok, body?.mensaje ?: if (ok) "correcto" else "error")
+                } else {
+                    onComplete(false, "Error servidor")
+                }
+            } catch (e: Exception) {
+                onComplete(false, e.message)
+            }
+        }
+    }
+
+    fun editarDetalle(
+        idDetalle: Int,
+        idRenta: Int?,
+        idTraje: Int?,
+        precio: Double?,
+        descripcion: String,
+        fechaInicio: String?,
+        fechaFin: String?,
+        onComplete: (Boolean, String?) -> Unit
+    ) {
+        viewModelScope.launch {
+            try {
+                val resp = RetrofitClient.api.editarDetalle(
+                    idDetalle = idDetalle,
+                    idRenta = idRenta,
+                    idTraje = idTraje,
+                    precio = precio?.toString(),
+                    descripcion = descripcion,
+                    fechaInicio = fechaInicio,  // Nombres exactos del ApiService
+                    fechaFin = fechaFin
+                )
+
+                if (resp.isSuccessful) {
+                    val body = resp.body()
+                    val ok = body?.status == "ok"
+                    if (ok) cargarDetalles(idRenta)
+                    onComplete(ok, body?.mensaje)
+                } else {
+                    onComplete(false, "Error servidor")
+                }
+            } catch (e: Exception) {
+                onComplete(false, e.message)
+            }
+        }
+    }
+
+    fun eliminarDetalle(
+        idDetalle: Int,
+        idRenta: Int?,
+        onComplete: (Boolean, String?) -> Unit
+    ) {
+        viewModelScope.launch {
+            try {
+                val resp = RetrofitClient.api.eliminarDetalle(idDetalle = idDetalle)
+                if (resp.isSuccessful) {
+                    val body = resp.body()
+                    val ok = body?.status == "ok"
+                    if (ok) cargarDetalles(idRenta)
+                    onComplete(ok, body?.mensaje)
+                } else {
+                    onComplete(false, "Error servidor")
+                }
+            } catch (e: Exception) {
+                onComplete(false, e.message)
+            }
+        }
+    }
+}
 
 
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 class MainActivity : ComponentActivity() {
 
     private val proveedoresVM: ProveedoresViewModel by viewModels()
     private val trajesVM: TrajesViewModel by viewModels()
-    private val clientesVM: ClientesViewModel by viewModels() // <-- Nuevo
+    private val clientesVM: ClientesViewModel by viewModels()
+
+    private val detalleRentaVM: DetalleRentaViewModel by viewModels()
 
     @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -368,7 +499,8 @@ class MainActivity : ComponentActivity() {
                 AppContent(
                     proveedoresVM = proveedoresVM,
                     trajesVM = trajesVM,
-                    clientesVM = clientesVM // <-- Nuevo
+                    clientesVM = clientesVM,
+                    detalleRentaVM = detalleRentaVM   // <-- aquí lo envías
                 )
             }
         }
@@ -381,7 +513,8 @@ fun AppContent(
     modifier: Modifier = Modifier,
     proveedoresVM: ProveedoresViewModel,
     trajesVM: TrajesViewModel,
-    clientesVM: ClientesViewModel // <-- Nuevo
+    clientesVM: ClientesViewModel,     // <-- ya estaba
+    detalleRentaVM: DetalleRentaViewModel   // <-- FALTABA ESTE
 ) {
     val navController = rememberNavController()
     val context = LocalContext.current
@@ -406,15 +539,16 @@ fun AppContent(
         composable("lstTrajes") { LstTrajesContent(navController, trajesVM) }
         composable("frmTrajes") { FrmTrajesContent(navController, trajesVM) }
 
-        // CLIENTES <-- NUEVO
+        // CLIENTES
         composable("lstClientes") { LstClientesContent(navController, clientesVM) }
         composable("frmClientes") { FrmClientesContent(navController, clientesVM) }
 
+        // DETALLE DE RENTA
+        composable("lstDetalleVenta") { LstDetalleRentaContent(navController, detalleRentaVM) }
+        composable("frmDetalleVenta") { FrmDetalleRentaContent(navController, detalleRentaVM) }
+
 
         // RENTAS
-        composable("lstDetalleVenta") { LstDetalleRentaContent(navController, modifier) }
-        composable("frmDetalleVenta") { FrmDetalleRentaContent(navController, modifier) }
-
         composable("lstRentas") { LstRentasContent(navController, modifier) }
         composable("frmRentas") { FrmRentasContent(navController, modifier) }
 
@@ -431,7 +565,8 @@ data class ModeloComentario(
     val comentario: String
 )
 
-///////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 // ────── MODELOS RENTA──────
 data class ModeloRenta(
     val id_renta: Int,
@@ -486,11 +621,24 @@ data class ModeloTraje(
     val precio: Float
 )
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+data class ModeloDetalleRenta(
+    val id_detalle: Int,
+    val id_renta: Int?,
+    val idtraje: Int?,
+    val precio: Double?,
+    val descripcion: String?,
+    val fechaHoraInicio: String?,
+    val fechaHoraFin: String?,
+    val nombre_traje: String?,        // <-- Nuevo
+    val nombre_cliente: String?
+)
 
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 val retrofit = Retrofit.Builder()
-    .baseUrl("https://sanyo-scanned-tahoe-capable.trycloudflare.com/api/")
+    .baseUrl("https://gibraltar-volumes-subaru-borough.trycloudflare.com/api2/")
     .addConverterFactory(ScalarsConverterFactory.create()) // <- primero
     .addConverterFactory(GsonConverterFactory.create())    // <- luego
     .build()
@@ -917,395 +1065,274 @@ fun FrmProveedoresContent(navController: androidx.navigation.NavHostController, 
 
 ////////////////   Abdiel DETALLE RENTA  //////////////////////////////////////////////////////
 @Composable
-fun LstDetalleRentaContent(navController: NavHostController, modifier: Modifier) {
-
-
-    data class Producto(val idRenta: Int, val idTraje: Int, val precio: Double, val descripcion: String, val fechaInicio: String, val fechaFin: String
-    )
-
-
-    val productos = remember {
-        mutableStateListOf(
-            Producto(1, 101, 850.00, "Renta de traje negro clásico", "2025-10-06 10:00", "2025-10-07 18:00"),
-            Producto(2, 102, 950.00, "Renta de traje azul marino", "2025-10-08 09:30", "2025-10-09 16:00"),
-            Producto(3, 103, 1200.00, "Renta de smoking para boda", "2025-10-10 14:00", "2025-10-12 20:00"),
-            Producto(4, 104, 700.00, "Renta de traje gris juvenil", "2025-10-11 12:00", "2025-10-12 15:30"),
-            Producto(5, 105, 1100.00, "Renta de traje blanco para gala", "2025-10-13 09:00", "2025-10-14 19:00")
-        )
-    }
-
-    val scrollState = rememberScrollState()
-
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(24.dp)
-            .horizontalScroll(scrollState)
-            .padding(8.dp),
-        horizontalAlignment = Alignment.Start,
-        verticalArrangement = Arrangement.Top
-    ) {
-
-
-        Button(
-            onClick = { navController.navigate("Menu") },
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color.Transparent,
-                contentColor = Color.Blue
-            ),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                "Menú",
-                style = TextStyle(textDecoration = TextDecoration.Underline),
-                textAlign = TextAlign.Start,
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-
-        Button(
-            onClick = { navController.navigate("frmDetalleVenta") },
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color.Transparent,
-                contentColor = Color.Blue
-            ),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                "Formulario",
-                style = TextStyle(textDecoration = TextDecoration.Underline),
-                textAlign = TextAlign.Start,
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Button(
-            onClick = {
-                productos.add(
-                    Producto(
-                        8,
-                        10,
-                        750.00,
-                        "Renta de traje negro a modo de prueba",
-                        "2025-10-06 10:00",
-                        "2025-10-07 18:00"
-                    ),
-                )
-            },
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color.Black,
-                contentColor = Color.White
-            ),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                "Agregar IDs prueba",
-                style = TextStyle(textDecoration = TextDecoration.Underline),
-                textAlign = TextAlign.Start,
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Text(
-            text = "Detalle De Renta",
-            fontSize = 20.sp,
-            fontWeight = FontWeight.ExtraBold,
-            modifier = Modifier.align(Alignment.Start),
-            color = Color.Red
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Row {
-            Text("ID Renta", modifier = Modifier.width(90.dp), fontWeight = FontWeight.Bold)
-            Text("ID Traje", modifier = Modifier.width(90.dp), fontWeight = FontWeight.Bold)
-            Text("Precio", modifier = Modifier.width(90.dp), fontWeight = FontWeight.Bold)
-            Text("Descripción", modifier = Modifier.width(200.dp), fontWeight = FontWeight.Bold)
-            Text("Inicio", modifier = Modifier.width(150.dp), fontWeight = FontWeight.Bold)
-            Text("Fin", modifier = Modifier.width(150.dp), fontWeight = FontWeight.Bold)
-            Text("Eliminar", modifier = Modifier.width(100.dp), fontWeight = FontWeight.Bold)
-        }
-
-        Divider()
-
-
-        productos.forEachIndexed { index, producto ->
-            val bgColor = if (index % 2 == 0) Color(0xFFF5F5F5) else Color.White
-
-            Row(modifier = Modifier.background(bgColor)) {
-                Text("${producto.idRenta}", modifier = Modifier.width(90.dp))
-                Text("${producto.idTraje}", modifier = Modifier.width(90.dp))
-                Text("$${producto.precio}", modifier = Modifier.width(90.dp))
-                Text(producto.descripcion, modifier = Modifier.width(200.dp))
-                Text(producto.fechaInicio, modifier = Modifier.width(150.dp))
-                Text(producto.fechaFin, modifier = Modifier.width(150.dp))
-                Button(onClick = { productos.removeAt(index) }) {
-                    Text("Eliminar")
-                }
-            }
-        }
-    }
-}
-
-@Composable
-@OptIn(ExperimentalMaterial3Api::class)
-fun FrmDetalleRentaContent(navController: NavHostController, modifier: Modifier) {
-
+fun LstDetalleRentaContent(
+    navController: NavHostController,
+    viewModel: DetalleRentaViewModel,
+    modifier: Modifier = Modifier,
+    idRentaFiltro: Int? = null
+) {
+    val detalles by viewModel.detalles.collectAsState()
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
-    val listaIdRenta = listOf("Renta001", "Renta002", "Renta003", "Renta004")
-    val listaIdTraje = listOf("TrajeA", "TrajeB", "TrajeC", "TrajeD")
-    var idRenta by remember { mutableStateOf<String?>(null) }
-    var idTraje by remember { mutableStateOf<String?>(null) }
-    var precio by remember { mutableStateOf<Double?>(null) }
-    var descripcion by remember { mutableStateOf("") }
-    var fechaInicio by remember { mutableStateOf("") }
-    var fechaFin by remember { mutableStateOf("") }
+    var refreshTrigger by remember { mutableStateOf(0) } // contador para forzar recarga
 
-    val scrollState = rememberScrollState()
+    LaunchedEffect(idRentaFiltro, refreshTrigger) {
+        viewModel.cargarDetalles(idRentaFiltro)
+    }
+
 
     Column(
         modifier = modifier
             .fillMaxSize()
-            .verticalScroll(scrollState)
-            .padding(24.dp),
-        horizontalAlignment = Alignment.Start,
-        verticalArrangement = Arrangement.Top
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState())
     ) {
-        Button(
-            onClick = {
-                navController.navigate("lstDetalleVenta")
-            },
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color.Transparent,
-                contentColor = Color.Blue
-            ),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                "Detalle De Renta",
-                style = TextStyle(textDecoration = TextDecoration.Underline),
-                textAlign = TextAlign.Start,
-                modifier = Modifier.fillMaxWidth()
-            )
+        Button(onClick = { navController.navigate("menu") }, colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent, contentColor = Color.Blue), modifier = Modifier.fillMaxWidth()) {
+            Text("Menu")
         }
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(Modifier.height(12.dp))
 
-        Text(
-            text = "Detalle De Renta",
-            fontSize = 20.sp,
-            fontWeight = FontWeight.ExtraBold,
-            modifier = Modifier.align(Alignment.CenterHorizontally)
-        )
-        Spacer(modifier = Modifier.height(16.dp))
+        Button(onClick = {
+            // pasar idRentaFiltro si quieres crear bajo una renta específica
+            navController.currentBackStackEntry?.savedStateHandle?.set("idRentaSeleccionada", idRentaFiltro)
+            navController.navigate("frmDetalleVenta")
+        }, colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent, contentColor = Color.Blue), modifier = Modifier.fillMaxWidth()) {
+            Text("Nuevo detalle")
+        }
+        Spacer(Modifier.height(16.dp))
 
-        Text(text = "ID Renta:")
-        var expandedRenta by remember { mutableStateOf(false) }
+        Text("Detalle de Renta", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(12.dp))
 
-        ExposedDropdownMenuBox(
-            expanded = expandedRenta,
-            onExpandedChange = { expandedRenta = !expandedRenta },
-            modifier = Modifier.fillMaxWidth()
+        // tabla con scroll horizontal para evitar que se amontone
+        Box(modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
         ) {
-            TextField(
-                modifier = Modifier
-                    .menuAnchor()
-                    .fillMaxWidth(),
-                readOnly = true,
-                value = idRenta ?: "",
-                onValueChange = { },
-                label = { Text("Seleccione ID Renta") },
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedRenta) },
-                colors = ExposedDropdownMenuDefaults.textFieldColors()
-            )
-            ExposedDropdownMenu(
-                expanded = expandedRenta,
-                onDismissRequest = { expandedRenta = false },
-            ) {
-                listaIdRenta.forEach { item ->
-                    DropdownMenuItem(
-                        text = { Text(item) },
-                        onClick = {
-                            idRenta = item
-                            expandedRenta = false
-                        },
-                        contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding
-                    )
+            Column {
+                Row {
+                    Text("ID Detalle", Modifier.width(100.dp), fontWeight = FontWeight.Bold)
+                    Text("Cliente/Renta", Modifier.width(160.dp), fontWeight = FontWeight.Bold)
+                    Text("Traje", Modifier.width(160.dp), fontWeight = FontWeight.Bold)
+                    Text("Precio", Modifier.width(100.dp), fontWeight = FontWeight.Bold)
+                    Text("Inicio", Modifier.width(180.dp), fontWeight = FontWeight.Bold)
+                    Text("Fin", Modifier.width(180.dp), fontWeight = FontWeight.Bold)
+                    Text("Eliminar", Modifier.width(120.dp), fontWeight = FontWeight.Bold)
+                    Text("Editar", Modifier.width(120.dp), fontWeight = FontWeight.Bold)
+                }
+                Divider()
+
+                detalles.forEach { d ->
+                    Row(modifier = Modifier
+                        .background(Color(0xFFF5F5F5))
+                        .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("${d.id_detalle}", Modifier.width(100.dp))
+                        Text(d.nombre_cliente ?: (d.id_renta?.toString() ?: "-"), Modifier.width(160.dp))
+                        Text(d.nombre_traje ?: (d.idtraje?.toString() ?: "-"), Modifier.width(160.dp))
+                        Text((d.precio?.toString() ?: "-"), Modifier.width(100.dp))
+                        Text(d.fechaHoraInicio ?: "-", Modifier.width(180.dp))
+                        Text(d.fechaHoraFin ?: "-", Modifier.width(180.dp))
+
+                        Button(onClick = {
+                            scope.launch {
+                                viewModel.eliminarDetalle(d.id_detalle, d.id_renta) { success, msg ->
+                                    Toast.makeText(context, if (success) "Eliminado" else "Error: $msg", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }, modifier = Modifier.width(120.dp)) { Text("Eliminar") }
+
+                        Spacer(Modifier.width(8.dp))
+
+                        Button(onClick = {
+                            // Enviar SOLO valores simples al formulario (no objetos)
+                            navController.currentBackStackEntry?.savedStateHandle?.set("id_detalle_edit", d.id_detalle)
+                            navController.currentBackStackEntry?.savedStateHandle?.set("id_renta_edit", d.id_renta)
+                            navController.currentBackStackEntry?.savedStateHandle?.set("id_traje_edit", d.idtraje)
+                            navController.currentBackStackEntry?.savedStateHandle?.set("precio_edit", d.precio?.toString())
+                            navController.currentBackStackEntry?.savedStateHandle?.set("descripcion_edit", d.descripcion)
+                            navController.currentBackStackEntry?.savedStateHandle?.set("fecha_inicio_edit", d.fechaHoraInicio)
+                            navController.currentBackStackEntry?.savedStateHandle?.set("fecha_fin_edit", d.fechaHoraFin)
+
+                            navController.navigate("frmDetalleVenta")
+                        }, modifier = Modifier.width(120.dp)) { Text("Editar") }
+                    }
+                    Spacer(Modifier.height(6.dp))
                 }
             }
-        }
-
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Text(text = "ID Traje:")
-        var expandedTraje by remember { mutableStateOf(false) }
-
-        ExposedDropdownMenuBox(
-            expanded = expandedTraje,
-            onExpandedChange = { expandedTraje = !expandedTraje },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            TextField(
-                modifier = Modifier
-                    .menuAnchor()
-                    .fillMaxWidth(),
-                readOnly = true,
-                value = idTraje ?: "",
-                onValueChange = { },
-                label = { Text("Seleccione ID Traje") },
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedTraje) },
-                colors = ExposedDropdownMenuDefaults.textFieldColors()
-            )
-            ExposedDropdownMenu(
-                expanded = expandedTraje,
-                onDismissRequest = { expandedTraje = false },
-            ) {
-                listaIdTraje.forEach { item ->
-                    DropdownMenuItem(
-                        text = { Text(item) },
-                        onClick = {
-                            idTraje = item
-                            expandedTraje = false
-                        },
-                        contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding
-                    )
-                }
-            }
-        }
-
-
-        Spacer(modifier = Modifier.height(16.dp))
-        Text(text = "Precio:")
-        TextField(
-            value = precio?.toString() ?: "",
-            onValueChange = { precio = it.toDoubleOrNull() },
-            placeholder = { Text("Ingrese el precio") },
-            modifier = Modifier.fillMaxWidth(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Text(text = "Descripción:")
-        TextField(
-            value = descripcion,
-            onValueChange = { descripcion = it },
-            placeholder = { Text("Ingrese la descripción") },
-            modifier = Modifier.fillMaxWidth(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text)
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Fecha/Hora Inicio
-        Text(text = "Fecha/Hora Inicio:")
-        OutlinedTextField(
-            value = fechaInicio,
-            onValueChange = { },
-            placeholder = { Text("Seleccione fecha y hora") },
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable {
-                    val calendar = Calendar.getInstance()
-                    val datePickerDialog = DatePickerDialog(
-                        context,
-                        { _, year, month, dayOfMonth ->
-                            calendar.set(year, month, dayOfMonth)
-                            val timePickerDialog = TimePickerDialog(
-                                context,
-                                { _, hourOfDay, minute ->
-                                    calendar.set(Calendar.HOUR_OF_DAY, hourOfDay)
-                                    calendar.set(Calendar.MINUTE, minute)
-                                    fechaInicio = String.format(
-                                        "%04d-%02d-%02d %02d:%02d",
-                                        calendar.get(Calendar.YEAR),
-                                        calendar.get(Calendar.MONTH) + 1,
-                                        calendar.get(Calendar.DAY_OF_MONTH),
-                                        calendar.get(Calendar.HOUR_OF_DAY),
-                                        calendar.get(Calendar.MINUTE)
-                                    )
-                                },
-                                calendar.get(Calendar.HOUR_OF_DAY),
-                                calendar.get(Calendar.MINUTE),
-                                true
-                            )
-                            timePickerDialog.show()
-                        },
-                        calendar.get(Calendar.YEAR),
-                        calendar.get(Calendar.MONTH),
-                        calendar.get(Calendar.DAY_OF_MONTH)
-                    )
-                    datePickerDialog.show()
-                },
-            enabled = false
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-
-
-        Text(text = "Fecha/Hora Fin:")
-        OutlinedTextField(
-            value = fechaFin,
-            onValueChange = { },
-            placeholder = { Text("Seleccione fecha y hora") },
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable {
-                    val calendar = Calendar.getInstance()
-                    val datePickerDialog = DatePickerDialog(
-                        context,
-                        { _, year, month, dayOfMonth ->
-                            calendar.set(year, month, dayOfMonth)
-                            val timePickerDialog = TimePickerDialog(
-                                context,
-                                { _, hourOfDay, minute ->
-                                    calendar.set(Calendar.HOUR_OF_DAY, hourOfDay)
-                                    calendar.set(Calendar.MINUTE, minute)
-                                    fechaFin = String.format(
-                                        "%04d-%02d-%02d %02d:%02d",
-                                        calendar.get(Calendar.YEAR),
-                                        calendar.get(Calendar.MONTH) + 1,
-                                        calendar.get(Calendar.DAY_OF_MONTH),
-                                        calendar.get(Calendar.HOUR_OF_DAY),
-                                        calendar.get(Calendar.MINUTE)
-                                    )
-                                },
-                                calendar.get(Calendar.HOUR_OF_DAY),
-                                calendar.get(Calendar.MINUTE),
-                                true
-                            )
-                            timePickerDialog.show()
-                        },
-                        calendar.get(Calendar.YEAR),
-                        calendar.get(Calendar.MONTH),
-                        calendar.get(Calendar.DAY_OF_MONTH)
-                    )
-                    datePickerDialog.show()
-                },
-            enabled = false
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Button(
-            onClick = {
-                Toast.makeText(context, "ID Renta: ${idRenta}", Toast.LENGTH_SHORT).show()
-                Toast.makeText(context, "ID Traje: ${idTraje}", Toast.LENGTH_SHORT).show()
-                Toast.makeText(context, "Precio: ${precio}", Toast.LENGTH_SHORT).show()
-                Toast.makeText(context, "Descripción: ${descripcion}", Toast.LENGTH_SHORT).show()
-                Toast.makeText(context, "Fecha/Hora Inicio: ${fechaInicio}", Toast.LENGTH_SHORT).show()
-                Toast.makeText(context, "Fecha/Hora Fin: ${fechaFin}", Toast.LENGTH_SHORT).show()
-
-
-            },
-            modifier = Modifier.align(Alignment.End)
-        ) {
-            Text("Enviar")
         }
     }
 }
+
+
+
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun FrmDetalleRentaContent(
+    navController: NavHostController,
+    detalleRentaVM: DetalleRentaViewModel
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    // valores enviados desde la lista (si vienen)
+    val idDetalleEditable = navController.previousBackStackEntry?.savedStateHandle?.get<Int>("id_detalle_edit")
+    val idRentaFromList = navController.previousBackStackEntry?.savedStateHandle?.get<Int>("id_renta_edit")
+    val idTrajeFromList = navController.previousBackStackEntry?.savedStateHandle?.get<Int>("id_traje_edit")
+    val precioFromList = navController.previousBackStackEntry?.savedStateHandle?.get<String>("precio_edit")
+    val descripcionFromList = navController.previousBackStackEntry?.savedStateHandle?.get<String>("descripcion_edit")
+    val fechaInicioFromList = navController.previousBackStackEntry?.savedStateHandle?.get<String>("fecha_inicio_edit")
+    val fechaFinFromList = navController.previousBackStackEntry?.savedStateHandle?.get<String>("fecha_fin_edit")
+
+    // estados locales
+    var selectedRenta by remember { mutableStateOf<ModeloRenta?>(null) }
+    var selectedTraje by remember { mutableStateOf<ModeloTraje?>(null) }
+    var precio by remember { mutableStateOf(precioFromList ?: "") }
+    var descripcion by remember { mutableStateOf(descripcionFromList ?: "") }
+    var fechaInicio by remember { mutableStateOf(fechaInicioFromList ?: "") }
+    var fechaFin by remember { mutableStateOf(fechaFinFromList ?: "") }
+
+    val rentasList = remember { mutableStateListOf<ModeloRenta>() }
+    val trajesList = remember { mutableStateListOf<ModeloTraje>() }
+
+    // Cargar listas de rentas y trajes
+    LaunchedEffect(Unit) {
+        try {
+            val r = RetrofitClient.api.mostrarRentas()
+            if (r.isSuccessful) {
+                rentasList.clear()
+                rentasList.addAll(r.body() ?: emptyList())
+                // si el formulario viene con un idRenta, selecciónalo
+                if (idRentaFromList != null) {
+                    selectedRenta = rentasList.find { it.id_renta == idRentaFromList }
+                }
+            }
+        } catch (e: Exception) { /* ignorar error visual */ }
+
+        try {
+            val t = RetrofitClient.api.getTrajes()
+            if (t.isNotEmpty()) {
+                trajesList.clear()
+                trajesList.addAll(t)
+                if (idTrajeFromList != null) {
+                    selectedTraje = trajesList.find { it.id_traje == idTrajeFromList }
+                }
+            }
+        } catch (e: Exception) { /* ignorar error visual */ }
+    }
+
+    val isEditMode = idDetalleEditable != null
+
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp)) {
+        Button(onClick = { navController.navigate("lstDetalleVenta") }, colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent, contentColor = Color.Blue)) {
+            Text("Regresar")
+        }
+        Spacer(Modifier.height(16.dp))
+        Text(if (isEditMode) "Editar Detalle" else "Nuevo Detalle", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(16.dp))
+
+        // Renta selector
+        Text("Renta:")
+        var expandRenta by remember { mutableStateOf(false) }
+        ExposedDropdownMenuBox(expanded = expandRenta, onExpandedChange = { expandRenta = !expandRenta }) {
+            TextField(value = selectedRenta?.nombre ?: "", onValueChange = {}, readOnly = true, label = { Text("Selecciona renta") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expandRenta) }, modifier = Modifier.menuAnchor().fillMaxWidth())
+            ExposedDropdownMenu(expanded = expandRenta, onDismissRequest = { expandRenta = false }) {
+                rentasList.forEach { r ->
+                    DropdownMenuItem(text = { Text("ID ${r.id_renta} - ${r.nombre}") }, onClick = { selectedRenta = r; expandRenta = false })
+                }
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+
+        // Traje selector
+        Text("Traje:")
+        var expandTraje by remember { mutableStateOf(false) }
+        ExposedDropdownMenuBox(expanded = expandTraje, onExpandedChange = { expandTraje = !expandTraje }) {
+            TextField(value = selectedTraje?.nombre_traje ?: "", onValueChange = {}, readOnly = true, label = { Text("Selecciona traje") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expandTraje) }, modifier = Modifier.menuAnchor().fillMaxWidth())
+            ExposedDropdownMenu(expanded = expandTraje, onDismissRequest = { expandTraje = false }) {
+                trajesList.forEach { t ->
+                    DropdownMenuItem(text = { Text(t.nombre_traje) }, onClick = { selectedTraje = t; expandTraje = false })
+                }
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+
+        Text("Precio:")
+        TextField(value = precio, onValueChange = { precio = it }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(12.dp))
+
+        Text("Descripción:")
+        TextField(value = descripcion, onValueChange = { descripcion = it }, modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(12.dp))
+
+        Text("Fecha/Hora Inicio:")
+        OutlinedTextField(value = fechaInicio, onValueChange = {}, modifier = Modifier.fillMaxWidth().clickable {
+            // selector de fecha/hora
+            val cal = Calendar.getInstance()
+            DatePickerDialog(context, { _, y, m, d ->
+                TimePickerDialog(context, { _, h, min ->
+                    fechaInicio = "%04d-%02d-%02d %02d:%02d".format(y, m + 1, d, h, min)
+                }, cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE), true).show()
+            }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)).show()
+        }, enabled = false)
+        Spacer(Modifier.height(12.dp))
+
+        Text("Fecha/Hora Fin:")
+        OutlinedTextField(value = fechaFin, onValueChange = {}, modifier = Modifier.fillMaxWidth().clickable {
+            val cal = Calendar.getInstance()
+            DatePickerDialog(context, { _, y, m, d ->
+                TimePickerDialog(context, { _, h, min ->
+                    fechaFin = "%04d-%02d-%02d %02d:%02d".format(y, m + 1, d, h, min)
+                }, cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE), true).show()
+            }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)).show()
+        }, enabled = false)
+        Spacer(Modifier.height(18.dp))
+
+        Button(onClick = {
+            if (selectedRenta == null || selectedTraje == null) {
+                Toast.makeText(context, "Selecciona renta y traje", Toast.LENGTH_SHORT).show()
+                return@Button
+            }
+
+            val precioVal = precio.toDoubleOrNull()
+
+            if (isEditMode) {
+                detalleRentaVM.editarDetalle(
+                    idDetalle = idDetalleEditable!!,
+                    idRenta = selectedRenta!!.id_renta,
+                    idTraje = selectedTraje!!.id_traje,
+                    precio = precioVal,
+                    descripcion = descripcion,
+                    fechaInicio = fechaInicio,
+                    fechaFin = fechaFin
+                ) { ok, msg ->
+                    Toast.makeText(context, msg ?: "", Toast.LENGTH_SHORT).show()
+                    if (ok) { navController.navigate("lstDetalleVenta") }
+                }
+            } else {
+                detalleRentaVM.insertarDetalle(
+                    idRenta = selectedRenta!!.id_renta,
+                    idTraje = selectedTraje!!.id_traje,
+                    precio = precioVal,
+                    descripcion = descripcion,
+                    fechaInicio = fechaInicio,
+                    fechaFin = fechaFin
+                ) { ok, msg ->
+                    Toast.makeText(context, msg ?: "", Toast.LENGTH_SHORT).show()
+                    if (ok) { navController.navigate("lstDetalleVenta") }
+                }
+            }
+        }, modifier = Modifier.align(Alignment.End)) {
+            Text(if (isEditMode) "Guardar cambios" else "Agregar detalle")
+        }
+    }
+}
+
+
+
 //////////////////////////////////////////////////////////////////
 
 

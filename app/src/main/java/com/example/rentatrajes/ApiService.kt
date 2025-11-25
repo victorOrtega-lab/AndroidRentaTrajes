@@ -5,6 +5,7 @@ import retrofit2.http.Field
 import retrofit2.http.FormUrlEncoded
 import retrofit2.http.GET
 import retrofit2.http.POST
+import retrofit2.http.Query
 
 interface ApiService {
 
@@ -131,6 +132,47 @@ suspend fun IniciarSesion(
     @GET("servicio.php?clientesRentas")
     suspend fun mostrarClientes(): Response<List<ModeloClienteRenta>>
 
+    // ============================================
+    // DETALLE RENTA — LA PARTE QUE ESTABA FALLANDO
+    // ============================================
+
+    @GET("servicio.php?detalleRenta")
+    suspend fun getDetalleRenta(
+        @Query("id_renta") idRenta: Int? = null
+    ): Response<List<ModeloDetalleRenta>>
+
+    @FormUrlEncoded
+    @POST("servicio.php")
+    suspend fun insertarDetalle(
+        @Field("accion") accion: String = "insertarDetalle", // <-- CORREGIDO
+        @Field("id_renta") idRenta: Int,
+        @Field("idtraje") idTraje: Int,
+        @Field("precio") precio: String?,
+        @Field("descripcion") descripcion: String,
+        @Field("fechaHoraInicio") fechaHoraInicio: String?,
+        @Field("fechaHoraFin") fechaHoraFin: String?
+    ): Response<Respuesta>
+
+    @FormUrlEncoded
+    @POST("servicio.php")
+    suspend fun editarDetalle(
+        @Field("accion") accion: String = "editarDetalle",
+        @Field("id_detalle") idDetalle: Int,
+        @Field("id_renta") idRenta: Int?,
+        @Field("idtraje") idTraje: Int?,
+        @Field("precio") precio: String?,
+        @Field("descripcion") descripcion: String,
+        @Field("fechaHoraInicio") fechaInicio: String?,
+        @Field("fechaHoraFin") fechaFin: String?
+    ): Response<Respuesta>
+
+    @FormUrlEncoded
+    @POST("servicio.php")
+    suspend fun eliminarDetalle(
+        @Field("accion") accion: String = "eliminarDetalle",
+        @Field("id_detalle") idDetalle: Int
+    ): Response<Respuesta>
+
     /////////////////////////////////////
 //--------------- COMENTARIOS
     //-- Mostrar comentarios ---//
@@ -148,6 +190,7 @@ suspend fun IniciarSesion(
     suspend fun eliminarComentario(
         @Field("id_comentario") id: Int
     ): Response<RespuestaSimple>
+
 
 
 
